@@ -47,7 +47,8 @@ def preferenciasTraductor2(value):
         "si": Cliente.Preferencias2.SI,
         "indiferente": Cliente.Preferencias2.IND
     }
-    value = value.lower()
+    # CORRECCIÓN: Protección contra NoneType
+    value = str(value or "").lower() 
     return mapa.get(value, Cliente.Preferencias2.IND)
 
 def estadoPropTrad(value):
@@ -130,6 +131,8 @@ class GHLOAuthCallbackView(APIView):
 # -------------------------------------------------------------------------
 # VISTA 2: WEBHOOK PROPIEDAD
 # -------------------------------------------------------------------------
+
+
 class WebhookPropiedadView(APIView):
     authentication_classes = []
     permission_classes = []
@@ -162,7 +165,7 @@ class WebhookPropiedadView(APIView):
             'balcon': preferenciasTraductor1(custom_data.get('balcon')),        
             'garaje': preferenciasTraductor1(custom_data.get('garaje')),
             'patioInterior': preferenciasTraductor1(custom_data.get('patioInterior')),
-            'imagenesUrl':guardadorURL(custom_data.get('imagenesUrl')),
+            'imagenesUrl': guardadorURL(custom_data.get('imagenesUrl')),
         }
         
         propiedad, created = Propiedad.objects.update_or_create(
@@ -203,7 +206,8 @@ class WebhookPropiedadView(APIView):
             # 3. SINCRONIZACIÓN CON GHL
             matches_count = clientes_match.count()
             
-            if matches_count >= 0: 
+            # CORRECCIÓN: Solo entramos si hay matches reales (> 0)
+            if matches_count > 0: 
                 # VALIDAR ID DE ASOCIACIÓN
                 if not agencia.association_type_id:
                     logger.warning(f"⚠️ Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
@@ -230,6 +234,7 @@ class WebhookPropiedadView(APIView):
 # -------------------------------------------------------------------------
 # VISTA 3: WEBHOOK CLIENTE
 # -------------------------------------------------------------------------
+
 class WebhookClienteView(APIView):
     authentication_classes = []
     permission_classes = []
@@ -248,6 +253,7 @@ class WebhookClienteView(APIView):
         ghl_contact_id = data.get('id') or custom_data.get('contact_id')
         if not ghl_contact_id: return Response({'error': 'Missing Contact ID'}, status=400)
 
+        # Normalización y limpieza de datos entrantes
         cliente_data = {
             'agencia': agencia, 
             'ghl_contact_id': ghl_contact_id,
@@ -261,41 +267,58 @@ class WebhookClienteView(APIView):
             'patioInterior': preferenciasTraductor2(custom_data.get('patioInterior')), 
         }
 
+        # Update or Create (Atómico por diseño de Django DB)
         cliente, created = Cliente.objects.update_or_create(
             agencia=agencia, 
             ghl_contact_id=ghl_contact_id, 
             defaults=cliente_data
         )
 
+        # Actualización de zonas de interés (Many-to-Many)
         zona_nombre = custom_data.get("zona_interes")
-        if (zona_nombre):
+        if zona_nombre:
             zona_lista = [z.strip() for z in str(zona_nombre).split(",")]
-            zonas = Zona.objects.filter(nombre__in = zona_lista)
+            # LOGGING: Traza de depuración útil para diagnósticos, sin usar print()
+            logger.debug(f"📍 Procesando zonas de interés para {ghl_contact_id}: {zona_lista}")
+            
+            zonas = Zona.objects.filter(nombre__in=zona_lista)
             cliente.zona_interes.set(zonas)
             cliente.save()
 
-        # 1. BUSCAR MATCHES
+        # 1. BUSCAR MATCHES (Lógica corregida: patioInterior + Q objects defensivos)
         propiedades_match = Propiedad.objects.filter(
-            Q(animales = Propiedad.Preferencias1.SI) if cliente.animales == Cliente.Preferencias1.SI else Q(),
-            Q(balcon = Propiedad.Preferencias1.SI) if cliente.balcon == Cliente.Preferencias2.SI else Q(),
-            Q(garaje = Propiedad.Preferencias1.SI) if cliente.garaje == Cliente.Preferencias2.SI else Q(),
-            Q(patioInterior = Propiedad.Preferencias1.SI) if cliente.garaje == Cliente.Preferencias2.SI else Q(),
+            # Si el cliente PIDE (SI) animales, filtramos propiedades que ADMITAN (SI). 
+            Q(animales=Propiedad.Preferencias1.SI) if cliente.animales == Cliente.Preferencias1.SI else Q(),
+            
+            # Si el cliente PIDE balcón, filtramos propiedades que TENGAN.
+            Q(balcon=Propiedad.Preferencias1.SI) if cliente.balcon == Cliente.Preferencias2.SI else Q(),
+            
+            # Si el cliente PIDE garaje, filtramos propiedades que TENGAN.
+            Q(garaje=Propiedad.Preferencias1.SI) if cliente.garaje == Cliente.Preferencias2.SI else Q(),
+            
+            # CORRECCIÓN CRÍTICA: Ahora comparamos cliente.patioInterior
+            Q(patioInterior=Propiedad.Preferencias1.SI) if cliente.patioInterior == Cliente.Preferencias2.SI else Q(),
 
             agencia=agencia,
             precio__lte=cliente.presupuesto_maximo,
             habitaciones__gte=cliente.habitaciones_minimas,
-            metros__gte = cliente.metrosMinimo,
+            metros__gte=cliente.metrosMinimo,
             estado='activo',
-            zona__in = cliente.zona_interes.all()
+            zona__in=cliente.zona_interes.all()
         ).distinct()
 
         # 2. ACTUALIZACIÓN LOCAL
+        # Mantenemos el "single source of truth" limpiando y reasignando
         cliente.propiedades_interes.clear()
         for prop in propiedades_match:
             cliente.propiedades_interes.add(prop)
             
-        # 3. SINCRONIZACIÓN CON GHL
+        # 3. SINCRONIZACIÓN CON GHL (Background)
         matches_count = propiedades_match.count()
+        
+        # LOGGING: Registro informativo del resultado del matching
+        logger.info(f"✅ Matches encontrados para {cliente.ghl_contact_id}: {matches_count}")
+
         if matches_count > 0:
             
             # VALIDAR ID DE ASOCIACIÓN
@@ -306,7 +329,8 @@ class WebhookClienteView(APIView):
             access_token = get_valid_token(location_id)
 
             if access_token:
-                # Esto podría saturar railway. OJO
+                # Iteramos para sincronizar cada match encontrado
+                # NOTA: En alta carga, mover esto a Celery/RQ para evitar Timeouts.
                 for prop in propiedades_match:
                     todos_los_interesados = prop.interesados.all()
                     target_ids = [c.ghl_contact_id for c in todos_los_interesados]
@@ -322,9 +346,6 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token valid found for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
-
-# ghl_middleware/views.py (Solo cambia esta clase al final del archivo)
-
 # Llamada de un formulario para recibir la lista de zonas
 
 def api_get_zonas_tree(request):

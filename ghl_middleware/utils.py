@@ -1,3 +1,4 @@
+# ghl_middleware/utils.py
 import requests
 import logging
 import time
@@ -6,6 +7,7 @@ from django.utils import timezone
 from django.conf import settings
 from .models import GHLToken
 
+# Configuración del logger estándar de Django
 logger = logging.getLogger(__name__)
 
 # --- NUEVAS FUNCIONES PARA TOKEN AUTO-REFRESH ---
@@ -21,14 +23,13 @@ def get_valid_token(location_id):
         return None
 
     # Calculamos cuándo caduca (updated_at + expires_in)
-    # Le restamos 600 segundos (10 min) de margen de seguridad para no apurar
+    # Le restamos 600 segundos (10 min) de margen de seguridad
     expiration_time = token_obj.updated_at + timedelta(seconds=token_obj.expires_in - 600)
     
     if timezone.now() > expiration_time:
         logger.info(f"🔄 El token de {location_id} ha caducado. Refrescando...")
         return refresh_ghl_token(token_obj)
     
-    # Si es válido, devolvemos el access_token actual
     return token_obj.access_token
 
 def refresh_ghl_token(token_obj):
@@ -41,7 +42,7 @@ def refresh_ghl_token(token_obj):
         'client_secret': settings.GHL_CLIENT_SECRET,
         'grant_type': 'refresh_token',
         'refresh_token': token_obj.refresh_token,
-        'user_type': 'Location' # Normalmente es Location para subcuentas
+        'user_type': 'Location'
     }
     
     try:
@@ -49,11 +50,10 @@ def refresh_ghl_token(token_obj):
         new_data = response.json()
         
         if response.status_code == 200:
-            # Guardamos los nuevos datos en la BBDD
             token_obj.access_token = new_data.get('access_token')
             token_obj.refresh_token = new_data.get('refresh_token')
             token_obj.expires_in = new_data.get('expires_in', 86400)
-            token_obj.save() # Esto actualiza 'updated_at' automáticamente
+            token_obj.save()
             logger.info(f"✅ Token refrescado correctamente para {token_obj.location_id}")
             return token_obj.access_token
         else:
@@ -133,14 +133,15 @@ def ghl_associate_records(access_token, location_id, property_id, contact_id, as
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=10)
         return response.status_code in [200, 201]
-    except:
+    # CORRECCIÓN MÍNIMA Y ROBUSTA: 'Exception' en lugar de bare except
+    except Exception as e:
+        logger.error(f"❌ Error asociando registros {contact_id}-{property_id}: {str(e)}")
         return False
 
 # --- NUEVA FUNCIÓN MEJORADA: AUTO-DETECCIÓN INTELIGENTE ---
 def get_association_type_id(access_token, location_id, object_key="propiedad"):
     """
     Busca el ID de asociación entre Contacto y el Custom Object.
-    MEJORA: Ahora busca 'propiedad', 'propiedades' y 'custom_objects.propiedades'.
     """
     url = "https://services.leadconnectorhq.com/associations/types"
     headers = {
@@ -155,41 +156,32 @@ def get_association_type_id(access_token, location_id, object_key="propiedad"):
         if response.status_code == 200:
             types = response.json().get('associationTypes', [])
             
-            # Preparamos los términos de búsqueda (singular, plural, con s)
-            target_singular = object_key.lower()          # propiedad
-            target_plural = target_singular + "es"        # propiedades
+            target_singular = object_key.lower()          
+            target_plural = target_singular + "es"        
             
-            logger.info(f"🕵️ Buscando asociación para '{target_singular}' (o plurales) en {location_id}...")
+            logger.info(f"🕵️ Buscando asociación para '{target_singular}' en {location_id}...")
 
             for t in types:
-                # Obtenemos las keys de ambos lados. GHL usa firstObjectKey/secondObjectKey
-                # pero a veces también sourceKey/targetKey. Revisamos todo por seguridad.
                 keys_found = [
                     t.get('firstObjectKey', ''),
                     t.get('secondObjectKey', ''),
                     t.get('sourceKey', ''),
                     t.get('targetKey', '')
                 ]
-                # Limpiamos vacíos y pasamos a minúsculas
                 keys_found = [k.lower() for k in keys_found if k]
                 
-                # 1. ¿Hay un contacto involucrado?
                 is_contact = 'contact' in keys_found
-                
-                # 2. ¿Hay una propiedad involucrada? (Buscamos coincidencia parcial)
-                # Esto detectará 'propiedad', 'propiedades' y 'custom_objects.propiedades'
                 is_target = any((target_singular in k) for k in keys_found)
                 
                 if is_contact and is_target:
                     found_id = t['id']
-                    logger.info(f"✅ ¡EUREKA! ID Encontrado: {found_id}")
+                    logger.info(f"✅ ID Encontrado: {found_id}")
                     return found_id
             
             logger.warning(f"⚠️ No se encontró ninguna asociación compatible con '{object_key}'")
             return None
             
         else:
-            # Aquí capturamos el error 400 típico de cuentas nuevas sin uniones previas
             logger.error(f"❌ Error API GHL al buscar ID ({response.status_code}): {response.text}")
             return None
 
@@ -204,36 +196,24 @@ def ghlActualizarZonaAPI(locationId, opciones, token, url, prop):
         "Content-Type": "application/json",
         "Accept": "application/json"
     }
-    print(f'"options":{opciones}')
+    # CAMBIO: print -> logger.debug
+    logger.debug(f'Update Options Payload: {opciones}')
+    
     try:
-        # Enviamos la petición
+        payload = {"options": opciones}
         if prop:
-            response = requests.put(
-                url, 
-                headers=headers, 
-                json={
-                    "locationId":locationId,
-                    "showInForms": True,
-                    "options":opciones
-                    },  
-                timeout=10
-            )
-        else:
-            response = requests.put(
-                url, 
-                headers=headers, 
-                json={"options":opciones}, 
-                timeout=10
-            )
+            payload["locationId"] = locationId
+            payload["showInForms"] = True
+            
+        response = requests.put(url, headers=headers, json=payload, timeout=10)
         
-        # Verificamos si GHL aceptó el cambio (200 OK o 204 No Content)
         if response.status_code in [200, 204]:
-            print("✅ Actualización exitosa")
+            logger.info("✅ Actualización exitosa de zonas en GHL")
             return response.json() if response.text else True
         else:
-            print(f"❌ Error {response.status_code}: {response.text}")
+            logger.error(f"❌ Error actualizando zonas {response.status_code}: {response.text}")
             return None
 
     except Exception as e:
-        print(f"💥 Error de conexión: {e}")
+        logger.error(f"💥 Error de conexión actualizando zonas: {str(e)}")
         return None

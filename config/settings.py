@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import dj_database_url # Necesario para la Base de Datos de Railway
 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
