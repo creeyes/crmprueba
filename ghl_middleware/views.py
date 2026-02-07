@@ -145,93 +145,96 @@ class WebhookPropiedadView(APIView):
         try:
             data = request.data
             logger.info(f"📥 Webhook Propiedad: {data}")
-            
+
             custom_data = data.get('customData', {})
             location_data = data.get('location', {})
             location_id = location_data.get('id') or custom_data.get('location_id')
-            
+
             if not location_id:
                 return Response({'error': 'Missing location_id'}, status=400)
-                
+
             agencia = get_object_or_404(Agencia, location_id=location_id)
             ghl_record_id = custom_data.get('contact_id') or data.get('id')
-            
+
             if not ghl_record_id:
                  return Response({'error': 'Missing Record ID'}, status=400)
 
-            prop_data = {
-                'agencia': agencia, 
-                'ghl_contact_id': ghl_record_id,
-                'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
-                'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
-                'estado': estadoPropTrad(custom_data.get("estado")),
-                'animales': preferenciasTraductor1(custom_data.get('animales')),        
-                'metros': clean_int(custom_data.get('metros')),        
-                'balcon': preferenciasTraductor1(custom_data.get('balcon')),        
-                'garaje': preferenciasTraductor1(custom_data.get('garaje')),
-                'patioInterior': preferenciasTraductor1(custom_data.get('patioInterior')),
-                'imagenesUrl': guardadorURL(custom_data.get('imagenesUrl')),
-            }
-            
-            propiedad, created = Propiedad.objects.update_or_create(
-                agencia=agencia, 
-                ghl_contact_id=ghl_record_id, 
-                defaults=prop_data
-            )
+            # TRANSACCIÓN: Garantiza que update_or_create + zona + matches se aplican juntos
+            with transaction.atomic():
+                prop_data = {
+                    'agencia': agencia,
+                    'ghl_contact_id': ghl_record_id,
+                    'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
+                    'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
+                    'estado': estadoPropTrad(custom_data.get("estado")),
+                    'animales': preferenciasTraductor1(custom_data.get('animales')),
+                    'metros': clean_int(custom_data.get('metros')),
+                    'balcon': preferenciasTraductor1(custom_data.get('balcon')),
+                    'garaje': preferenciasTraductor1(custom_data.get('garaje')),
+                    'patioInterior': preferenciasTraductor1(custom_data.get('patioInterior')),
+                    'imagenesUrl': guardadorURL(custom_data.get('imagenesUrl')),
+                }
 
-            zona = custom_data.get("zona")
-            if (zona):
-                zonaLimpio = zona.replace("_"," ").lower().strip()
-                zonaObj = Zona.objects.filter(nombre__iexact=zonaLimpio).first()
-                if (zonaObj):
-                    propiedad.zona = zonaObj
-                    propiedad.save()
-
-            if (propiedad.estado == Propiedad.estadoPiso.ACTIVO):
-                # 1. BUSCAR NUEVOS MATCHES
-                clientes_match = Cliente.objects.filter(
-                    Q(animales = Cliente.Preferencias1.NO) if propiedad.animales == Propiedad.Preferencias1.NO else Q(),
-                    Q(balcon = Cliente.Preferencias2.IND) if propiedad.balcon == Propiedad.Preferencias1.NO else Q(),
-                    Q(garaje = Cliente.Preferencias2.IND) if propiedad.garaje == Propiedad.Preferencias1.NO else Q(),
-                    Q(patioInterior = Cliente.Preferencias2.IND) if propiedad.patioInterior == Propiedad.Preferencias1.NO else Q(),
-
+                propiedad, created = Propiedad.objects.update_or_create(
                     agencia=agencia,
-                    zona_interes=propiedad.zona,
-                    presupuesto_maximo__gte=propiedad.precio,
-                    habitaciones_minimas__lte=propiedad.habitaciones,
-                    metrosMinimo__lte=propiedad.metros
-                ).distinct()
+                    ghl_contact_id=ghl_record_id,
+                    defaults=prop_data
+                )
 
-                # 2. ACTUALIZACIÓN LOCAL
-                propiedad.interesados.clear() 
-                for cliente in clientes_match:
-                    cliente.propiedades_interes.add(propiedad)
+                zona = custom_data.get("zona")
+                if (zona):
+                    zonaLimpio = zona.replace("_"," ").lower().strip()
+                    zonaObj = Zona.objects.filter(nombre__iexact=zonaLimpio).first()
+                    if (zonaObj):
+                        propiedad.zona = zonaObj
+                        propiedad.save()
 
-                # 3. SINCRONIZACIÓN CON GHL
-                matches_count = clientes_match.count()
-                
-                if matches_count > 0: 
-                    if not agencia.association_type_id:
-                        logger.warning(f"⚠️ Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
-                        return Response({'status': 'warning', 'msg': 'Falta Association ID', 'matches_found': matches_count})
+                if (propiedad.estado == Propiedad.estadoPiso.ACTIVO):
+                    # 1. BUSCAR NUEVOS MATCHES
+                    clientes_match = Cliente.objects.filter(
+                        Q(animales = Cliente.Preferencias1.NO) if propiedad.animales == Propiedad.Preferencias1.NO else Q(),
+                        Q(balcon = Cliente.Preferencias2.IND) if propiedad.balcon == Propiedad.Preferencias1.NO else Q(),
+                        Q(garaje = Cliente.Preferencias2.IND) if propiedad.garaje == Propiedad.Preferencias1.NO else Q(),
+                        Q(patioInterior = Cliente.Preferencias2.IND) if propiedad.patioInterior == Propiedad.Preferencias1.NO else Q(),
 
-                    access_token = get_valid_token(location_id)
-                    
-                    if access_token:
-                        target_ids = [c.ghl_contact_id for c in clientes_match]
-                        
-                        sync_associations_background(
-                            access_token=access_token,
-                            location_id=location_id,
-                            origin_record_id=propiedad.ghl_contact_id,
-                            target_ids_list=target_ids, 
-                            association_id_val=agencia.association_type_id 
-                        )
-                    else:
-                        logger.warning(f"⚠️ No token valid found for {location_id}")
+                        agencia=agencia,
+                        zona_interes=propiedad.zona,
+                        presupuesto_maximo__gte=propiedad.precio,
+                        habitaciones_minimas__lte=propiedad.habitaciones,
+                        metrosMinimo__lte=propiedad.metros
+                    ).distinct()
 
-                return Response({'status': 'success', 'matches_found': matches_count})
-            return Response({'status': 'success'})
+                    # 2. ACTUALIZACIÓN LOCAL
+                    propiedad.interesados.clear()
+                    for cliente in clientes_match:
+                        cliente.propiedades_interes.add(propiedad)
+
+                    matches_count = clientes_match.count()
+                else:
+                    matches_count = 0
+
+            # 3. SINCRONIZACIÓN CON GHL (fuera de la transacción: llamadas HTTP externas)
+            if matches_count > 0:
+                if not agencia.association_type_id:
+                    logger.warning(f"⚠️ Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
+                    return Response({'status': 'warning', 'msg': 'Falta Association ID', 'matches_found': matches_count})
+
+                access_token = get_valid_token(location_id)
+
+                if access_token:
+                    target_ids = [c.ghl_contact_id for c in clientes_match]
+
+                    sync_associations_background(
+                        access_token=access_token,
+                        location_id=location_id,
+                        origin_record_id=propiedad.ghl_contact_id,
+                        target_ids_list=target_ids,
+                        association_id_val=agencia.association_type_id
+                    )
+                else:
+                    logger.warning(f"⚠️ No token valid found for {location_id}")
+
+            return Response({'status': 'success', 'matches_found': matches_count})
 
         except Exception as e:
             logger.error(f"❌ Error en Webhook Propiedad: {str(e)}", exc_info=True)
@@ -260,54 +263,57 @@ class WebhookClienteView(APIView):
             ghl_contact_id = data.get('id') or custom_data.get('contact_id')
             if not ghl_contact_id: return Response({'error': 'Missing Contact ID'}, status=400)
 
-            cliente_data = {
-                'agencia': agencia, 
-                'ghl_contact_id': ghl_contact_id,
-                'nombre': custom_data.get('full_name'),
-                'presupuesto_maximo': clean_currency(custom_data.get('presupuesto') or data.get('presupuesto')),
-                'habitaciones_minimas': clean_int(custom_data.get('habitaciones') or data.get('habitaciones_min')),
-                'animales': preferenciasTraductor1(custom_data.get('animales')),        
-                'metrosMinimo': clean_int(custom_data.get('metros')),        
-                'balcon': preferenciasTraductor2(custom_data.get('balcon')),        
-                'garaje': preferenciasTraductor2(custom_data.get('garaje')),
-                'patioInterior': preferenciasTraductor2(custom_data.get('patioInterior')), 
-            }
+            # TRANSACCIÓN: Garantiza que update_or_create + zonas + matches se aplican juntos
+            with transaction.atomic():
+                cliente_data = {
+                    'agencia': agencia,
+                    'ghl_contact_id': ghl_contact_id,
+                    'nombre': custom_data.get('full_name'),
+                    'presupuesto_maximo': clean_currency(custom_data.get('presupuesto') or data.get('presupuesto')),
+                    'habitaciones_minimas': clean_int(custom_data.get('habitaciones') or data.get('habitaciones_min')),
+                    'animales': preferenciasTraductor1(custom_data.get('animales')),
+                    'metrosMinimo': clean_int(custom_data.get('metros')),
+                    'balcon': preferenciasTraductor2(custom_data.get('balcon')),
+                    'garaje': preferenciasTraductor2(custom_data.get('garaje')),
+                    'patioInterior': preferenciasTraductor2(custom_data.get('patioInterior')),
+                }
 
-            cliente, created = Cliente.objects.update_or_create(
-                agencia=agencia, 
-                ghl_contact_id=ghl_contact_id, 
-                defaults=cliente_data
-            )
+                cliente, created = Cliente.objects.update_or_create(
+                    agencia=agencia,
+                    ghl_contact_id=ghl_contact_id,
+                    defaults=cliente_data
+                )
 
-            zona_nombre = custom_data.get("zona_interes")
-            if zona_nombre:
-                zona_lista = [z.strip() for z in str(zona_nombre).split(",")]
-                logger.debug(f"📍 Procesando zonas de interés para {ghl_contact_id}: {zona_lista}")
-                
-                zonas = Zona.objects.filter(nombre__in=zona_lista)
-                cliente.zona_interes.set(zonas)
-                cliente.save()
+                zona_nombre = custom_data.get("zona_interes")
+                if zona_nombre:
+                    zona_lista = [z.strip() for z in str(zona_nombre).split(",")]
+                    logger.debug(f"📍 Procesando zonas de interés para {ghl_contact_id}: {zona_lista}")
 
-            propiedades_match = Propiedad.objects.filter(
-                Q(animales=Propiedad.Preferencias1.SI) if cliente.animales == Cliente.Preferencias1.SI else Q(),
-                Q(balcon=Propiedad.Preferencias1.SI) if cliente.balcon == Cliente.Preferencias2.SI else Q(),
-                Q(garaje=Propiedad.Preferencias1.SI) if cliente.garaje == Cliente.Preferencias2.SI else Q(),
-                Q(patioInterior=Propiedad.Preferencias1.SI) if cliente.patioInterior == Cliente.Preferencias2.SI else Q(),
-                agencia=agencia,
-                precio__lte=cliente.presupuesto_maximo,
-                habitaciones__gte=cliente.habitaciones_minimas,
-                metros__gte=cliente.metrosMinimo,
-                estado='activo',
-                zona__in=cliente.zona_interes.all()
-            ).distinct()
+                    zonas = Zona.objects.filter(nombre__in=zona_lista)
+                    cliente.zona_interes.set(zonas)
+                    cliente.save()
 
-            cliente.propiedades_interes.clear()
-            for prop in propiedades_match:
-                cliente.propiedades_interes.add(prop)
-                
-            matches_count = propiedades_match.count()
-            logger.info(f"✅ Matches encontrados para {cliente.ghl_contact_id}: {matches_count}")
+                propiedades_match = Propiedad.objects.filter(
+                    Q(animales=Propiedad.Preferencias1.SI) if cliente.animales == Cliente.Preferencias1.SI else Q(),
+                    Q(balcon=Propiedad.Preferencias1.SI) if cliente.balcon == Cliente.Preferencias2.SI else Q(),
+                    Q(garaje=Propiedad.Preferencias1.SI) if cliente.garaje == Cliente.Preferencias2.SI else Q(),
+                    Q(patioInterior=Propiedad.Preferencias1.SI) if cliente.patioInterior == Cliente.Preferencias2.SI else Q(),
+                    agencia=agencia,
+                    precio__lte=cliente.presupuesto_maximo,
+                    habitaciones__gte=cliente.habitaciones_minimas,
+                    metros__gte=cliente.metrosMinimo,
+                    estado='activo',
+                    zona__in=cliente.zona_interes.all()
+                ).distinct()
 
+                cliente.propiedades_interes.clear()
+                for prop in propiedades_match:
+                    cliente.propiedades_interes.add(prop)
+
+                matches_count = propiedades_match.count()
+                logger.info(f"✅ Matches encontrados para {cliente.ghl_contact_id}: {matches_count}")
+
+            # SINCRONIZACIÓN CON GHL (fuera de la transacción: llamadas HTTP externas)
             if matches_count > 0:
                 if not agencia.association_type_id:
                     logger.warning(f"⚠️ Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
@@ -323,7 +329,7 @@ class WebhookClienteView(APIView):
                         sync_associations_background(
                             access_token=access_token,
                             location_id=location_id,
-                            origin_record_id=prop.ghl_contact_id, 
+                            origin_record_id=prop.ghl_contact_id,
                             target_ids_list=target_ids,
                             association_id_val=agencia.association_type_id
                         )
