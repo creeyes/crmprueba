@@ -5,36 +5,50 @@ import time
 from datetime import timedelta
 from django.utils import timezone
 from django.conf import settings
+from django.db import transaction  # <--- CRÍTICO: Faltaba este import
 from .models import GHLToken
 
 # Configuración del logger estándar de Django
 logger = logging.getLogger(__name__)
 
-# --- NUEVAS FUNCIONES PARA TOKEN AUTO-REFRESH ---
+# --- NUEVAS FUNCIONES PARA TOKEN AUTO-REFRESH CON LOCKING ---
 
 def get_valid_token(location_id):
     """
-    Recupera el token. Si ha caducado (o está a punto), lo refresca automáticamente.
+    Recupera el token asegurando exclusividad en el acceso a la base de datos.
+    Usa 'select_for_update' para evitar que dos procesos refresquen al mismo tiempo (Race Condition).
     """
     try:
-        token_obj = GHLToken.objects.get(location_id=location_id)
-    except GHLToken.DoesNotExist:
-        logger.error(f"❌ No se encontró token para location_id: {location_id}")
-        return None
+        # Iniciamos transacción para bloquear la fila hasta que terminemos
+        with transaction.atomic():
+            try:
+                # select_for_update() detiene a otros procesos aquí si ya hay uno trabajando con este location_id
+                token_obj = GHLToken.objects.select_for_update().get(location_id=location_id)
+            except GHLToken.DoesNotExist:
+                logger.error(f"❌ No se encontró token para location_id: {location_id}")
+                return None
 
-    # Calculamos cuándo caduca (updated_at + expires_in)
-    # Le restamos 600 segundos (10 min) de margen de seguridad
-    expiration_time = token_obj.updated_at + timedelta(seconds=token_obj.expires_in - 600)
-    
-    if timezone.now() > expiration_time:
-        logger.info(f"🔄 El token de {location_id} ha caducado. Refrescando...")
-        return refresh_ghl_token(token_obj)
-    
-    return token_obj.access_token
+            # Calculamos cuándo caduca (updated_at + expires_in)
+            # Margen de seguridad: 10 minutos (600 segundos)
+            expiration_time = token_obj.updated_at + timedelta(seconds=token_obj.expires_in - 600)
+            
+            # Si el token ha caducado, lo refrescamos DENTRO del bloqueo.
+            # El siguiente proceso que entre verá el token ya actualizado.
+            if timezone.now() > expiration_time:
+                logger.info(f"🔄 El token de {location_id} ha caducado. Refrescando bajo bloqueo DB...")
+                return refresh_ghl_token(token_obj)
+            
+            return token_obj.access_token
+
+    except Exception as e:
+        # Captura genérica para asegurar que cualquier fallo no rompa el flujo sin loguear
+        logger.error(f"❌ Error crítico obteniendo token seguro: {str(e)}", exc_info=True)
+        return None
 
 def refresh_ghl_token(token_obj):
     """
     Solicita un nuevo access_token a GHL usando el refresh_token guardado.
+    NOTA: Esta función se ejecuta dentro del lock de get_valid_token.
     """
     url = "https://services.leadconnectorhq.com/oauth/token"
     payload = {
@@ -46,14 +60,15 @@ def refresh_ghl_token(token_obj):
     }
     
     try:
-        response = requests.post(url, data=payload, timeout=10)
+        # Timeout estricto para no mantener la DB bloqueada demasiado tiempo si GHL cae
+        response = requests.post(url, data=payload, timeout=20)
         new_data = response.json()
         
         if response.status_code == 200:
             token_obj.access_token = new_data.get('access_token')
             token_obj.refresh_token = new_data.get('refresh_token')
             token_obj.expires_in = new_data.get('expires_in', 86400)
-            token_obj.save()
+            token_obj.save() # Esto confirma la transacción en get_valid_token
             logger.info(f"✅ Token refrescado correctamente para {token_obj.location_id}")
             return token_obj.access_token
         else:
@@ -67,7 +82,7 @@ def refresh_ghl_token(token_obj):
 # --- FUNCIONES EXISTENTES (Asociaciones) ---
 
 def ghl_get_current_associations(access_token, location_id, property_id):
-    time.sleep(0.5)
+    time.sleep(0.5) # Rate limit preventivo
     headers = { "Authorization": f"Bearer {access_token}", "Version": "2021-07-28", "Accept": "application/json" }
     
     url = f"https://services.leadconnectorhq.com/associations/relations/{property_id}"
@@ -133,12 +148,11 @@ def ghl_associate_records(access_token, location_id, property_id, contact_id, as
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=10)
         return response.status_code in [200, 201]
-    # CORRECCIÓN MÍNIMA Y ROBUSTA: 'Exception' en lugar de bare except
     except Exception as e:
         logger.error(f"❌ Error asociando registros {contact_id}-{property_id}: {str(e)}")
         return False
 
-# --- NUEVA FUNCIÓN MEJORADA: AUTO-DETECCIÓN INTELIGENTE ---
+# --- AUTO-DETECCIÓN INTELIGENTE ---
 def get_association_type_id(access_token, location_id, object_key="propiedad"):
     """
     Busca el ID de asociación entre Contacto y el Custom Object.
@@ -157,7 +171,7 @@ def get_association_type_id(access_token, location_id, object_key="propiedad"):
             types = response.json().get('associationTypes', [])
             
             target_singular = object_key.lower()          
-            target_plural = target_singular + "es"        
+            # target_plural = target_singular + "es" # (No se usa actualmente)       
             
             logger.info(f"🕵️ Buscando asociación para '{target_singular}' en {location_id}...")
 
@@ -196,7 +210,7 @@ def ghlActualizarZonaAPI(locationId, opciones, token, url, prop):
         "Content-Type": "application/json",
         "Accept": "application/json"
     }
-    # CAMBIO: print -> logger.debug
+    
     logger.debug(f'Update Options Payload: {opciones}')
     
     try:
