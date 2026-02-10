@@ -14,9 +14,10 @@ _executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="ghl_sync_")
 atexit.register(lambda: _executor.shutdown(wait=False))
 
 
-def sync_associations_background(access_token, location_id, origin_record_id, target_ids_list, association_id_val, association_type="contact"):
+def sync_associations_background(access_token, location_id, origin_record_id, target_ids_list, association_id_val, origin_is_contact=False):
     """
     Sincroniza asociaciones en background usando ThreadPoolExecutor.
+    origin_is_contact=True implica que origin_record_id es el Contacto y target_ids_list son Propiedades.
     """
     def _worker_process():
         try:
@@ -27,15 +28,20 @@ def sync_associations_background(access_token, location_id, origin_record_id, ta
             ids_to_add = target_ids - current_ids
             ids_to_remove = current_ids - target_ids
 
-            logger.info(f"Sync Propiedad {origin_record_id}: +{len(ids_to_add)} | -{len(ids_to_remove)}")
+            logger.info(f"Sync {'Cliente' if origin_is_contact else 'Propiedad'} {origin_record_id}: +{len(ids_to_add)} | -{len(ids_to_remove)}")
 
-            for contact_id in ids_to_remove:
-                rel_info = current_map.get(contact_id)
+            for target_id in ids_to_remove:
+                rel_info = current_map.get(target_id)
                 if rel_info and rel_info.get('id'):
                     ghl_delete_association(access_token, location_id, rel_info.get('id'))
 
-            for contact_id in ids_to_add:
-                ghl_associate_records(access_token, location_id, origin_record_id, contact_id, association_id_val)
+            for target_id in ids_to_add:
+                if origin_is_contact:
+                    # Origin es Cliente (contact_id), Target es Propiedad (property_id)
+                    ghl_associate_records(access_token, location_id, target_id, origin_record_id, association_id_val)
+                else:
+                    # Origin es Propiedad (property_id), Target es Cliente (contact_id)
+                    ghl_associate_records(access_token, location_id, origin_record_id, target_id, association_id_val)
 
         except Exception as e:
             logger.error(f"Error en sync_associations para {origin_record_id}: {str(e)}", exc_info=True)

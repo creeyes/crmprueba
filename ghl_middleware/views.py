@@ -207,25 +207,25 @@ class WebhookPropiedadView(APIView):
                     matches_count = 0
 
             # Sincronizacion con GHL (fuera de la transaccion: llamadas HTTP externas)
-            if matches_count > 0:
-                if not agencia.association_type_id:
-                    logger.warning(f"Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
-                    return Response({'status': 'warning', 'msg': 'Falta Association ID', 'matches_found': matches_count})
+            # Fix: Sincronizar SIEMPRE, incluso si matches_count es 0, para limpiar asociaciones viejas.
+            if not agencia.association_type_id:
+                logger.warning(f"Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
+                return Response({'status': 'warning', 'msg': 'Falta Association ID', 'matches_found': matches_count})
 
-                access_token = get_valid_token(location_id)
+            access_token = get_valid_token(location_id)
 
-                if access_token:
-                    target_ids = [c.ghl_contact_id for c in clientes_match]
+            if access_token:
+                target_ids = [c.ghl_contact_id for c in clientes_match]  # Sera [] si matches_count == 0
 
-                    sync_associations_background(
-                        access_token=access_token,
-                        location_id=location_id,
-                        origin_record_id=propiedad.ghl_contact_id,
-                        target_ids_list=target_ids,
-                        association_id_val=agencia.association_type_id
-                    )
-                else:
-                    logger.warning(f"No valid token found for {location_id}")
+                sync_associations_background(
+                    access_token=access_token,
+                    location_id=location_id,
+                    origin_record_id=propiedad.ghl_contact_id,
+                    target_ids_list=target_ids,
+                    association_id_val=agencia.association_type_id
+                )
+            else:
+                logger.warning(f"No valid token found for {location_id}")
 
             return Response({'status': 'success', 'matches_found': matches_count})
 
@@ -262,6 +262,14 @@ class WebhookClienteView(APIView):
                 return Response({'error': 'Missing Contact ID'}, status=400)
 
             with transaction.atomic():
+                # Fix: Capturar las propiedades con las que coincidia ANTES de actualizar
+                # Para saber cuales hay que actualizar si deja de coincidir.
+                cliente_existente = Cliente.objects.filter(ghl_contact_id=ghl_contact_id, agencia=agencia).first()
+                if cliente_existente:
+                     old_matched_ids = list(cliente_existente.propiedades_interes.values_list('id', flat=True))
+                else:
+                     old_matched_ids = []
+
                 cliente_data = {
                     'agencia': agencia,
                     'ghl_contact_id': ghl_contact_id,
@@ -295,27 +303,28 @@ class WebhookClienteView(APIView):
                 logger.info(f"Matches encontrados para {cliente.ghl_contact_id}: {matches_count}")
 
             # Sincronizacion con GHL (fuera de la transaccion)
-            if matches_count > 0:
-                if not agencia.association_type_id:
-                    logger.warning(f"Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
-                    return Response({'status': 'warning', 'msg': 'Falta Association ID', 'matches_found': matches_count})
+            # Sincronizacion con GHL (fuera de la transaccion)
+            if not agencia.association_type_id:
+                logger.warning(f"Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
+                return Response({'status': 'warning', 'msg': 'Falta Association ID', 'matches_found': matches_count})
 
-                access_token = get_valid_token(location_id)
+            access_token = get_valid_token(location_id)
 
-                if access_token:
-                    for prop in propiedades_match:
-                        todos_los_interesados = prop.interesados.all()
-                        target_ids = [c.ghl_contact_id for c in todos_los_interesados]
+            if access_token:
+                # El objetivo es que este Cliente este asociado con ESTAS propiedades.
+                # Cualquier otra asociacion sera borrada por sync_associations_background.
+                target_prop_ids = [p.ghl_contact_id for p in propiedades_match]
 
-                        sync_associations_background(
-                            access_token=access_token,
-                            location_id=location_id,
-                            origin_record_id=prop.ghl_contact_id,
-                            target_ids_list=target_ids,
-                            association_id_val=agencia.association_type_id
-                        )
-                else:
-                    logger.warning(f"No valid token found for {location_id}")
+                sync_associations_background(
+                    access_token=access_token,
+                    location_id=location_id,
+                    origin_record_id=cliente.ghl_contact_id,
+                    target_ids_list=target_prop_ids,
+                    association_id_val=agencia.association_type_id,
+                    origin_is_contact=True  # IMPORTANTE: Indica que origin es Cliente
+                )
+            else:
+                logger.warning(f"No valid token found for {location_id}")
 
             return Response({'status': 'success', 'matches_found': matches_count})
 
