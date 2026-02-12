@@ -2,6 +2,7 @@ import logging
 import hmac
 import hashlib
 import requests
+import json
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -480,7 +481,8 @@ class GlobalDebugView(APIView):
             print(f"Method: {request.method}")
             print(f"Headers: {dict(request.headers)}")
             print(f"GET Params: {request.GET.dict()}")
-            print(f"Todo el request: {request}")
+            data = json.loads(request.body)
+            print(json.dumps(data, indent=4))
             
             # Intentar leer body si es posible (cuidado con Streams)
             try:
@@ -508,4 +510,5 @@ class GlobalDebugView(APIView):
 
     def delete(self, request):
         return Response({"status": "debug_received", "message": "DELETE request logged"})
+
 
