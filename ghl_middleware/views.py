@@ -410,3 +410,100 @@ class RegistrarUbicacionView(APIView):
                 'status': 'error',
                 'message': 'Error interno del servidor.'
             }, status=500)
+
+
+# -------------------------------------------------------------------------
+# VISTA 4: WEBHOOK PROPIEDAD DELETE
+# -------------------------------------------------------------------------
+class WebhookPropiedadDeleteView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        if not verify_webhook_signature(request):
+            return Response({'error': 'Invalid signature'}, status=403)
+
+        try:
+            data = request.data
+            logger.info(f"Webhook Propiedad DELETE recibido: {data}")
+            print(f"--- INFO DELETE PROPIEDAD: {data} ---") # Print explicito para verificacion rapida en consola
+
+            # AQUI IMPLEMENTAREMOS LA LOGICA DE BORRADO MAS ADELANTE
+            
+            return Response({'status': 'received', 'action': 'delete_property'})
+
+        except Exception as e:
+            logger.error(f"Error en Webhook Propiedad Delete: {str(e)}", exc_info=True)
+            return Response({"error": "Error interno procesando delete propiedad"}, status=500)
+
+
+# -------------------------------------------------------------------------
+# VISTA 5: WEBHOOK CLIENTE DELETE
+# -------------------------------------------------------------------------
+class WebhookClienteDeleteView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        if not verify_webhook_signature(request):
+            return Response({'error': 'Invalid signature'}, status=403)
+
+        try:
+            data = request.data
+            logger.info(f"Webhook Cliente DELETE recibido: {data}")
+            print(f"--- INFO DELETE CLIENTE: {data} ---") # Print explicito para verificacion rapida en consola
+
+            # AQUI IMPLEMENTAREMOS LA LOGICA DE BORRADO MAS ADELANTE
+
+            return Response({'status': 'received', 'action': 'delete_client'})
+
+        except Exception as e:
+            logger.error(f"Error en Webhook Cliente Delete: {str(e)}", exc_info=True)
+            return Response({"error": "Error interno procesando delete cliente"}, status=500)
+
+
+# -------------------------------------------------------------------------
+# VISTA 6: GLOBAL DEBUG VIEW
+# -------------------------------------------------------------------------
+class GlobalDebugView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def dispatch(self, request, *args, **kwargs):
+        """
+        Intercepta todas las peticiones para imprimir detalles en consola
+        y luego delega en el metodo correspondiente (si existe) o devuelve respuesta generica.
+        """
+        try:
+            print(f"\n====== GHL MIDDLEWARE DEBUG REQUEST ======")
+            print(f"Path: {request.path}")
+            print(f"Method: {request.method}")
+            print(f"Headers: {dict(request.headers)}")
+            print(f"GET Params: {request.GET.dict()}")
+            
+            # Intentar leer body si es posible (cuidado con Streams)
+            try:
+                if request.content_type == 'application/json':
+                    print(f"Body (JSON): {request.data}")
+                else:
+                    print(f"Body (Raw): {request.body.decode('utf-8', errors='ignore')}")
+            except Exception as e:
+                print(f"Error leyendo body: {e}")
+
+            print(f"==========================================\n")
+        except Exception as e:
+            print(f"Error en Debug Print: {e}")
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request):
+        return Response({"status": "debug_received", "message": "GET request logged"})
+    
+    def post(self, request):
+        return Response({"status": "debug_received", "message": "POST request logged"})
+    
+    def put(self, request):
+        return Response({"status": "debug_received", "message": "PUT request logged"})
+
+    def delete(self, request):
+        return Response({"status": "debug_received", "message": "DELETE request logged"})
