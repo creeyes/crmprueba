@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     # Apps:
     'ghl_middleware',
     'GHL_Front',
+    'GHL_RRSS',
     'rest_framework',
 ]
 
@@ -216,3 +217,4 @@ if not DEBUG:
 CORS_ALLOW_CREDENTIALS = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
+
