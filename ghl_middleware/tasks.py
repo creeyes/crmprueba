@@ -1,103 +1,110 @@
+# ghl_middleware/tasks.py
+"""
+CORRECCIÓN #17: Implementado ThreadPoolExecutor con max_workers para limitar
+la cantidad de hilos concurrentes y evitar sobrecarga del sistema.
+"""
 import logging
-import atexit
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from .utils import ghl_associate_records, ghl_get_current_associations, ghl_delete_association, ghlActualizarZonaAPI
 from .models import Zona, Agencia, GHLToken
 
 
 logger = logging.getLogger(__name__)
 
-# Pool de hilos global con limite de workers
+# CORRECCIÓN #17: Pool de hilos global con límite de workers
+# Esto evita crear hilos infinitos si llegan muchos webhooks simultáneos
 _executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="ghl_sync_")
 
-# Registrar shutdown automatico al apagar el proceso
-atexit.register(lambda: _executor.shutdown(wait=False))
 
-
-def sync_associations_background(access_token, location_id, origin_record_id, target_ids_list, association_id_val, origin_is_contact=False):
+def sync_associations_background(access_token, location_id, origin_record_id, target_ids_list, association_id_val, association_type="contact"):
     """
     Sincroniza asociaciones en background usando ThreadPoolExecutor.
-    origin_is_contact=True implica que origin_record_id es el Contacto y target_ids_list son Propiedades.
+    CORRECCIÓN #17: Ya no crea hilos ilimitados, usa el pool global.
     """
     def _worker_process():
         try:
+            # 1. Obtener estado actual
             current_map = ghl_get_current_associations(access_token, location_id, origin_record_id)
-            current_ids = set(current_map.keys())
+            current_ids = set(current_map.keys()) 
             target_ids = set(target_ids_list)
-
+            
+            # 2. Calcular diferencias
             ids_to_add = target_ids - current_ids
             ids_to_remove = current_ids - target_ids
 
-            logger.info(f"Sync {'Cliente' if origin_is_contact else 'Propiedad'} {origin_record_id}: +{len(ids_to_add)} | -{len(ids_to_remove)}")
+            logger.info(f"🔄 Sync Propiedad {origin_record_id}: +{len(ids_to_add)} | -{len(ids_to_remove)}")
 
-            for target_id in ids_to_remove:
-                rel_info = current_map.get(target_id)
+            # 3. Borrar excedentes
+            for contact_id in ids_to_remove:
+                rel_info = current_map.get(contact_id)
                 if rel_info and rel_info.get('id'):
                     ghl_delete_association(access_token, location_id, rel_info.get('id'))
 
-            for target_id in ids_to_add:
-                if origin_is_contact:
-                    # Origin es Cliente (contact_id), Target es Propiedad (property_id)
-                    ghl_associate_records(access_token, location_id, target_id, origin_record_id, association_id_val)
-                else:
-                    # Origin es Propiedad (property_id), Target es Cliente (contact_id)
-                    ghl_associate_records(access_token, location_id, origin_record_id, target_id, association_id_val)
-
+            # 4. Añadir faltantes
+            for contact_id in ids_to_add:
+                ghl_associate_records(access_token, location_id, origin_record_id, contact_id, association_id_val)
+                
         except Exception as e:
-            logger.error(f"Error en sync_associations para {origin_record_id}: {str(e)}", exc_info=True)
+            logger.error(f"❌ Error en sync_associations para {origin_record_id}: {str(e)}", exc_info=True)
 
+    # Enviar tarea al pool en vez de crear un hilo nuevo
     future = _executor.submit(_worker_process)
+    # Opcional: callback para loguear errores
     future.add_done_callback(lambda f: f.result() if not f.exception() else logger.error(f"Task failed: {f.exception()}"))
 
 
 def funcionAsyncronaZonas():
     """
     Actualiza las zonas en GHL para todas las agencias.
-    Lee los IDs de campos personalizados desde el modelo Agencia (dinamico, sin hardcodear).
+    CORRECCIÓN #17: Usa ThreadPoolExecutor en vez de threading.Thread.
     """
-    def actualizacion_zonas_agencias():
+    def actualizacionZonasAgencias():
         try:
-            opciones_propiedad = []
-            opciones_cliente = []
+            opcionesPropiedad = []
+            opcionesCliente = []
             for zona in Zona.objects.all():
-                label = zona.nombre
+                label = zona.nombre             
                 value = label.lower().strip().replace(" ", "_")
-
-                opciones_propiedad.append({
+                
+                opcionesPropiedad.append({
                     "label": label,
                     "value": value
                 })
-                opciones_cliente.append(label)
+                opcionesCliente.append(label)
 
-            for agencia in Agencia.objects.filter(active=True):
-                location_id = agencia.location_id
-                if not location_id:
-                    continue
+            # Estos dos de momento están hardcodeados, pero luego se ha de cambiar para que sea automatico y lo lea por agencia
+            idPropiedad = ["hS4cEeTEOSITPlkOyYx5", "otsVf8GDT9QyqTeVbNs5"]
+            idCliente = ["kAMWAxQudbtRtEWWL4eE", "dTS9Cyfwu7pbK28roBMK"]
 
-                # Saltar agencias que no tienen IDs de campos personalizados configurados
-                if not agencia.ghl_custom_field_propiedad_zona or not agencia.ghl_custom_field_cliente_zona:
-                    logger.warning(f"Agencia {location_id} no tiene custom field IDs de zona configurados. Saltando.")
-                    continue
-
-                try:
-                    token = GHLToken.objects.get(location_id=location_id).access_token
-
-                    url_propiedad = f"https://services.leadconnectorhq.com/custom-fields/{agencia.ghl_custom_field_propiedad_zona}/"
-                    url_cliente = f"https://services.leadconnectorhq.com/locations/{location_id}/customFields/{agencia.ghl_custom_field_cliente_zona}/"
-
-                    ghlActualizarZonaAPI(location_id, opciones_propiedad, token, url_propiedad, True)
-                    ghlActualizarZonaAPI(location_id, opciones_cliente, token, url_cliente, False)
-
-                except GHLToken.DoesNotExist:
-                    logger.warning(f"No existe token para agencia {location_id}")
-
+            for i, agencia in enumerate(Agencia.objects.all()):
+                locationId = agencia.location_id
+                if locationId:
+                    try:
+                        token = GHLToken.objects.get(location_id=locationId).access_token
+                        # Validar que el índice existe antes de usar
+                        if i < len(idPropiedad):
+                            urlPropiedad = f"https://services.leadconnectorhq.com/custom-fields/{idPropiedad[i]}/"
+                            urlCliente = f"https://services.leadconnectorhq.com/locations/{locationId}/customFields/{idCliente[i]}/"
+                            ghlActualizarZonaAPI(locationId, opcionesPropiedad, token, urlPropiedad, True)
+                            ghlActualizarZonaAPI(locationId, opcionesCliente, token, urlCliente, False)
+                        else:
+                            logger.warning(f"⚠️ Índice {i} fuera de rango para IDs de campos personalizados")
+                    except GHLToken.DoesNotExist:
+                        logger.warning(f"⚠️ No existe token para agencia {locationId}")
+                else:
+                    logger.warning("No existe location ID. Por lo que se presupone que no existe la agencia")
+                    
         except Exception as e:
-            logger.error(f"Error actualizando zonas: {str(e)}", exc_info=True)
+            logger.error(f"❌ Error actualizando zonas: {str(e)}", exc_info=True)
 
-    _executor.submit(actualizacion_zonas_agencias)
+    # Usar el pool de hilos global
+    _executor.submit(actualizacionZonasAgencias)
 
 
 def shutdown_executor():
-    """Cierra el pool de hilos limpiamente."""
+    """
+    Función para cerrar el pool de hilos limpiamente al apagar el servidor.
+    Llamar desde AppConfig.ready() o al cerrar Django.
+    """
     _executor.shutdown(wait=True)
-    logger.info("ThreadPoolExecutor cerrado correctamente")
+    logger.info("🛑 ThreadPoolExecutor cerrado correctamente")

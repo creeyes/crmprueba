@@ -15,28 +15,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # --- CONFIGURACIÓN DE SEGURIDAD Y ENTORNO ---
 
 # 1. SECRET KEY:
-# Obligatorio en producción. En local genera una temporal automáticamente.
-SECRET_KEY = os.environ.get('SECRET_KEY')
-if not SECRET_KEY:
-    if 'RAILWAY_ENVIRONMENT' in os.environ:
-        raise RuntimeError("SECRET_KEY no configurada en producción. Añádela en Railway Variables.")
-    else:
-        import secrets
-        SECRET_KEY = secrets.token_urlsafe(50)
+# Lee de Railway o usa la default en local.
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-bqy+h6+*$li6+o^mrh)ys)$i&f(h)q0vhc7y7&n9c%3me1)yhl')
 
 # 2. DEBUG:
 # False en producción (Railway), True en local.
 DEBUG = 'RAILWAY_ENVIRONMENT' not in os.environ
 
 # 3. ALLOWED HOSTS:
-# En producción solo acepta dominios configurados. En local permite localhost.
-_allowed = os.environ.get('ALLOWED_HOSTS', '')
-if _allowed:
-    ALLOWED_HOSTS = [h.strip() for h in _allowed.split(',') if h.strip()]
-elif DEBUG:
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
-else:
-    ALLOWED_HOSTS = ['.railway.app', '.up.railway.app']
+# Permite el dominio dinámico de Railway.
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -48,17 +36,18 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'corsheaders',
-    # Apps:
-    'ghl_middleware',
-    'GHL_Front',
-    'rest_framework',
+    'corsheaders',  # <--- NUEVO: Librería para permitir conexión desde GHL
+    # Tus apps:
+    'ghl_middleware', # Tu lógica
+    'GHL_Front',      # Frontend/UI de GHL
+    'GHL_RRSS',       # Redes Sociales de GHL
+    'rest_framework', # Para la API
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware', # <--- NUEVO: Debe ir EL PRIMERO
     'django.middleware.security.SecurityMiddleware',
-    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware", # CRÍTICO: Para CSS en Railway
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -89,6 +78,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 
 # --- BASE DE DATOS (Auto-configurable) ---
+# CORRECCIÓN #38: Añadido fallback de SQLite para desarrollo local
 DATABASES = {
     'default': dj_database_url.config(
         default=os.environ.get('DATABASE_URL', 'sqlite:///db.sqlite3'),
@@ -117,6 +107,7 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+# CORRECCIÓN #39: Migrado STATICFILES_STORAGE a STORAGES (Django 4.2+)
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -134,25 +125,24 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # --- CONFIGURACIÓN DRF ---
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
     ]
 }
 
 
 # --- SEGURIDAD EXTRA PARA RAILWAY Y GHL ---
+# Confía en el HTTPS de Railway
 CSRF_TRUSTED_ORIGINS = [
-    'https://api.leadconnectorhq.com',
-    'https://widgets.leadconnectorhq.com',
-    'https://app.gohighlevel.com',
-    'https://*.railway.app',
+    'https://api.leadconnectorhq.com', 
+    'https://widgets.leadconnectorhq.com', 
+    'https://app.gohighlevel.com', # <--- CORREGIDO: Añadida coma que faltaba
+    'https://*.railway.app', 
     'https://*.up.railway.app'
-]
+] 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# Permitir iframe solo desde dominios de GHL y Railway
-X_FRAME_OPTIONS = 'SAMEORIGIN'
-# CSP frame-ancestors es más flexible que X_FRAME_OPTIONS para múltiples dominios
-CSP_FRAME_ANCESTORS = "'self' https://app.gohighlevel.com https://*.leadconnectorhq.com"
+# Si vas a cargar esta app dentro de un IFRAME en GHL (Custom Menu Link):
+X_FRAME_OPTIONS = 'ALLOWALL' 
 
 
 # --- LOGGING (CRÍTICO PARA VER ERRORES EN RAILWAY) ---
@@ -180,12 +170,15 @@ LOGGING = {
 
 
 # --- CONFIGURACIÓN "EL CRUZADO" (OAUTH2 GHL MARKETPLACE) ---
+# Estas variables DEBEN estar en "Variables" de tu proyecto en Railway.
+# Si no las pones en Railway, fallará la autenticación.
+
+# Credenciales de tu App en GHL Marketplace
 GHL_CLIENT_ID = os.environ.get('GHL_CLIENT_ID', '')
 GHL_CLIENT_SECRET = os.environ.get('GHL_CLIENT_SECRET', '')
-GHL_REDIRECT_URI = os.environ.get('GHL_REDIRECT_URI', 'http://localhost:8000/api/oauth/callback/')
 
-# Secreto para verificar webhooks de GHL (configurable por variable de entorno)
-GHL_WEBHOOK_SECRET = os.environ.get('GHL_WEBHOOK_SECRET', '')
+# URL de redirección (debe coincidir con la del Marketplace)
+GHL_REDIRECT_URI = os.environ.get('GHL_REDIRECT_URI', 'http://localhost:8000/api/oauth/callback/')
 
 # Scopes
 GHL_SCOPES = [
@@ -198,21 +191,10 @@ GHL_SCOPES = [
     'custom_objects/records.write',
 ]
 
-# --- CORS PARA GHL ---
-# En producción usa orígenes explícitos, en local permite todo para desarrollo
-CORS_ALLOW_ALL_ORIGINS = DEBUG
-
-if not DEBUG:
-    CORS_ALLOWED_ORIGINS = [
-        'https://app.gohighlevel.com',
-        'https://widgets.leadconnectorhq.com',
-        'https://api.leadconnectorhq.com',
-    ]
-    # Añadir dominios de Railway si están configurados
-    _railway_url = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '')
-    if _railway_url:
-        CORS_ALLOWED_ORIGINS.append(f'https://{_railway_url}')
+# --- NUEVO: PERMISOS CORS PARA GHL ---
+# Esto permite que el navegador acepte peticiones desde los scripts de GHL
+CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOW_CREDENTIALS = True
-CSRF_COOKIE_SAMESITE = 'None'
-CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'None'  # Permite que la cookie viaje entre dominios
+CSRF_COOKIE_SECURE = True       # Obligatorio si usas 'None'
