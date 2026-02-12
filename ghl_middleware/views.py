@@ -480,6 +480,7 @@ class GlobalDebugView(APIView):
             print(f"Method: {request.method}")
             print(f"Headers: {dict(request.headers)}")
             print(f"GET Params: {request.GET.dict()}")
+            print(f"Todo el request: {request}")
             
             # Intentar leer body si es posible (cuidado con Streams)
             try:
@@ -507,3 +508,4 @@ class GlobalDebugView(APIView):
 
     def delete(self, request):
         return Response({"status": "debug_received", "message": "DELETE request logged"})
+
