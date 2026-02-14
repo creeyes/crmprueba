@@ -13,7 +13,7 @@ from django.db import transaction
 
 from .models import Agencia, Propiedad, Cliente, GHLToken, Provincia, Municipio, Zona
 from .tasks import sync_associations_background, funcionAsyncronaZonas
-from .utils import get_valid_token, get_association_type_id
+from .utils import get_valid_token, get_association_type_id, initialize_ghl_setup
 from .helpers import (
     clean_currency, clean_int, preferenciasTraductor1,
     preferenciasTraductor2, estadoPropTrad, guardadorURL
@@ -119,15 +119,15 @@ class GHLOAuthCallbackView(APIView):
                         location_id=location_id, defaults={'active': True}
                     )
 
-                    logger.info(f"Buscando ID de asociacion para {location_id}...")
-                    found_id = get_association_type_id(access_token, location_id, object_key="propiedad")
+                    logger.info(f"Iniciando Setup Wizard para {location_id}...")
+                    # Ejecutamos el setup completo (busqueda de IDs, creacion de dummies, etc.)
+                    # Esto actualiza la instancia 'agencia' internamente.
+                    setup_success = initialize_ghl_setup(access_token, location_id, agencia)
 
-                    if found_id:
-                        agencia.association_type_id = found_id
-                        agencia.save()
-                        logger.info(f"ID de asociacion detectado y guardado: {found_id}")
+                    if setup_success:
+                        logger.info(f"Setup completado para {location_id}.")
                     else:
-                        logger.warning(f"No se pudo detectar el ID automaticamente para {location_id}.")
+                        logger.warning(f"Setup finalizado con advertencias para {location_id}. Revisar logs.")
 
                 return Response({"message": "App instalada y configurada.", "location_id": location_id}, status=200)
 

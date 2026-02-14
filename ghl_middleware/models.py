@@ -50,12 +50,21 @@ class Agencia(models.Model):
     )
     # ------------------------------------
     
-    # CORRECCIÓN #25: Umbral configurable para propiedades destacadas
     umbral_featured = models.DecimalField(
-        max_digits=12, 
-        decimal_places=2, 
+        max_digits=12,
+        decimal_places=2,
         default=500000,
-        help_text="Precio mínimo para marcar una propiedad como destacada (isFeatured)"
+        help_text="Precio minimo para marcar una propiedad como destacada (isFeatured)"
+    )
+
+    # IDs de campos personalizados en GHL para sincronizar zonas (por agencia)
+    ghl_custom_field_propiedad_zona = models.CharField(
+        max_length=255, blank=True, null=True,
+        help_text="ID del custom field de zona en el Custom Object Propiedad de GHL"
+    )
+    ghl_custom_field_cliente_zona = models.CharField(
+        max_length=255, blank=True, null=True,
+        help_text="ID del custom field de zona en Contactos de GHL"
     )
 
     def __str__(self):
