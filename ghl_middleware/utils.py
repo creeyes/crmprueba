@@ -528,10 +528,10 @@ def actualizarAgenciaIndividualZona(agencia, location_id):
     for zona in Zona.objects.all():
         label = zona.nombre
         value = label.lower().strip().replace(" ", "_")
-
+        # Los nombres de abajo han de ser así. No estan mal puestos.
         opciones_propiedad.append({
             "key": label,
-            "value": value
+            "label": value
         })
         opciones_cliente.append(label)
     if not agencia.ghl_custom_field_propiedad_zona or not agencia.ghl_custom_field_cliente_zona:
