@@ -325,7 +325,7 @@ def get_property_object_id(access_token, location_id):
     try:
         response = _http_session.get(url, headers=headers, params=params, timeout=10)
         if response.status_code == 200:
-            objects = response.json().get('customObjects', [])
+            objects = response.json().get('objects', [])
             for obj in objects:
                 if obj.get('key') == 'custom_objects.propiedades':
                     return obj.get('id')
