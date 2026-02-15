@@ -14,7 +14,7 @@ def clean_currency(value):
     if not value:
         return 0.0
     try:
-        return float(str(value).replace('$', '').replace(',', '.').strip())
+        return float(str(value).replace("€","").replace('$', '').replace(',', '.').strip())
     except ValueError:
         return 0.0
 
