@@ -142,6 +142,40 @@ def refresh_ghl_token(token_obj):
         return None
 
 
+def get_location_name(access_token, location_id):
+    """
+    Obtiene el nombre de la agencia desde GHL API.
+    Retorna el nombre o None si falla.
+    """
+    url = f"https://services.leadconnectorhq.com/locations/{location_id}"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Version": "2021-07-28",
+        "Accept": "application/json"
+    }
+
+    try:
+        response = _http_session.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            location_name = data.get('location', {}).get('name')
+            
+            if location_name:
+                logger.info(f"Nombre de agencia obtenido: {location_name}")
+                return location_name
+            else:
+                logger.warning(f"No se encontró el campo 'location.name' en la respuesta para {location_id}")
+                return None
+        else:
+            logger.error(f"Error obteniendo nombre de location {location_id}: {response.status_code} - {response.text}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Excepción obteniendo nombre de location {location_id}: {str(e)}")
+        return None
+
+
 # --- FUNCIONES DE API GHL (Asociaciones) ---
 
 def ghl_get_current_associations(access_token, location_id, property_id):

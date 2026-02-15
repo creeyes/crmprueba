@@ -13,7 +13,7 @@ from django.db import transaction
 
 from .models import Agencia, Propiedad, Cliente, GHLToken, Provincia, Municipio, Zona
 from .tasks import sync_associations_background, funcionAsyncronaZonas
-from .utils import get_valid_token, get_association_type_id, initialize_ghl_setup
+from .utils import get_valid_token, get_association_type_id, initialize_ghl_setup, get_location_name
 from .helpers import (
     clean_currency, clean_int, preferenciasTraductor1,
     preferenciasTraductor2, estadoPropTrad, guardadorURL
@@ -118,6 +118,20 @@ class GHLOAuthCallbackView(APIView):
                     agencia, created = Agencia.objects.get_or_create(
                         location_id=location_id, defaults={'active': True}
                     )
+
+                    # Obtener y guardar el nombre de la agencia desde GHL API
+                    try:
+                        location_name = get_location_name(access_token, location_id)
+                        if location_name:
+                            agencia.nombre = location_name
+                            agencia.save()
+                            logger.info(f"Nombre de agencia guardado: {location_name}")
+                        else:
+                            logger.warning(f"No se pudo obtener el nombre de la agencia para {location_id}")
+                    except Exception as name_error:
+                        logger.error(f"Error obteniendo nombre de agencia: {str(name_error)}", exc_info=True)
+                        # Continuar incluso si falla (no es crítico)
+
 
                     logger.info(f"Iniciando Setup Wizard para {location_id}...")
                     # Ejecutamos el setup completo (busqueda de IDs, creacion de dummies, etc.)
