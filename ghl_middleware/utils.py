@@ -8,7 +8,7 @@ from datetime import timedelta
 from django.utils import timezone
 from django.conf import settings
 from django.db import transaction
-from .models import GHLToken
+from .models import GHLToken, Zona
 
 
 logger = logging.getLogger(__name__)
@@ -522,6 +522,34 @@ def delete_dummy_property(access_token, property_object_id, record_id):
     except Exception as e:
         logger.error(f"Excepcion borrando propiedad dummy: {str(e)}")
 
+def actualizarAgenciaIndividualZona(agencia, location_id):
+    opciones_propiedad = []
+    opciones_cliente = []
+    for zona in Zona.objects.all():
+        label = zona.nombre
+        value = label.lower().strip().replace(" ", "_")
+
+        opciones_propiedad.append({
+            "label": label,
+            "value": value
+        })
+        opciones_cliente.append(label)
+    if not agencia.ghl_custom_field_propiedad_zona or not agencia.ghl_custom_field_cliente_zona:
+        logger.warning(f"Agencia {location_id} no tiene custom field IDs de zona configurados. Saltando.")
+        return
+
+    try:
+        token = GHLToken.objects.get(location_id=location_id).access_token
+
+        url_propiedad = f"https://services.leadconnectorhq.com/custom-fields/{agencia.ghl_custom_field_propiedad_zona}/"
+        url_cliente = f"https://services.leadconnectorhq.com/locations/{location_id}/customFields/{agencia.ghl_custom_field_cliente_zona}/"
+
+        ghlActualizarZonaAPI(location_id, opciones_propiedad, token, url_propiedad, True)
+        ghlActualizarZonaAPI(location_id, opciones_cliente, token, url_cliente, False)
+
+    except GHLToken.DoesNotExist:
+        logger.warning(f"No existe token para agencia {location_id}")
+
 def initialize_ghl_setup(access_token, location_id, agencia):
     """
     Orquesta todo el proceso de setup inicial de GHL:
@@ -577,6 +605,8 @@ def initialize_ghl_setup(access_token, location_id, agencia):
             agencia.ghl_custom_field_propiedad_zona = fields_map['zona_propiedad']
             updated = True
 
+        actualizarAgenciaIndividualZona(agencia, location_id)
+        
         if updated:
             agencia.save()
             logger.info(f"Setup completado exitosamente para {location_id}. Agencia actualizada.")
