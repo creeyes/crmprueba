@@ -9,12 +9,12 @@ from .models import Cliente, Propiedad
 def clean_currency(value):
     """
     Limpia y convierte un valor de moneda a float.
-    Maneja formatos como '$1,234.56' o '1234.56'.
+    Maneja formatos como '$1234,56' o '1234,56'.
     """
     if not value:
         return 0.0
     try:
-        return float(str(value).replace('$', '').replace(',', '').strip())
+        return float(str(value).replace('$', '').replace(',', '.').strip())
     except ValueError:
         return 0.0
 
