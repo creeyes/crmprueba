@@ -64,8 +64,8 @@ def funcionAsyncronaZonas():
                 value = label.lower().strip().replace(" ", "_")
                 # Los nombres de abajo han de ser así. No estan mal puestos.
                 opciones_propiedad.append({
-                    "key": label,
-                    "label": value
+                    "key": value,
+                    "label": label
                 })
                 opciones_cliente.append(label)
 
