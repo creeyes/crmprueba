@@ -1,7 +1,7 @@
 import logging
 import atexit
 from concurrent.futures import ThreadPoolExecutor
-from .utils import ghl_associate_records, ghl_get_current_associations, ghl_delete_association, ghlActualizarZonaAPI
+from .utils import ghl_associate_records, ghl_get_current_associations, ghl_delete_association, ghlActualizarZonaAPI, get_valid_token
 from .models import Zona, Agencia, GHLToken
 
 
@@ -80,7 +80,10 @@ def funcionAsyncronaZonas():
                     continue
 
                 try:
-                    token = GHLToken.objects.get(location_id=location_id).access_token
+                    token = get_valid_token(location_id)
+                    if not token:
+                        logger.warning(f"No se pudo obtener token válido para agencia {location_id}")
+                        continue
 
                     url_propiedad = f"https://services.leadconnectorhq.com/custom-fields/{agencia.ghl_custom_field_propiedad_zona}/"
                     url_cliente = f"https://services.leadconnectorhq.com/locations/{location_id}/customFields/{agencia.ghl_custom_field_cliente_zona}/"
@@ -88,8 +91,8 @@ def funcionAsyncronaZonas():
                     ghlActualizarZonaAPI(location_id, opciones_propiedad, token, url_propiedad, True)
                     ghlActualizarZonaAPI(location_id, opciones_cliente, token, url_cliente, False)
 
-                except GHLToken.DoesNotExist:
-                    logger.warning(f"No existe token para agencia {location_id}")
+                except Exception as e:
+                    logger.error(f"Error obteniendo token para agencia {location_id}: {str(e)}")
 
         except Exception as e:
             logger.error(f"Error actualizando zonas: {str(e)}", exc_info=True)

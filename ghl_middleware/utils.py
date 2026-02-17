@@ -539,7 +539,10 @@ def actualizarAgenciaIndividualZona(agencia, location_id):
         return
 
     try:
-        token = GHLToken.objects.get(location_id=location_id).access_token
+        token = get_valid_token(location_id)
+        if not token:
+            logger.warning(f"No se pudo obtener token válido para agencia {location_id}")
+            return
 
         url_propiedad = f"https://services.leadconnectorhq.com/custom-fields/{agencia.ghl_custom_field_propiedad_zona}/"
         url_cliente = f"https://services.leadconnectorhq.com/locations/{location_id}/customFields/{agencia.ghl_custom_field_cliente_zona}/"
@@ -547,8 +550,8 @@ def actualizarAgenciaIndividualZona(agencia, location_id):
         ghlActualizarZonaAPI(location_id, opciones_propiedad, token, url_propiedad, True)
         ghlActualizarZonaAPI(location_id, opciones_cliente, token, url_cliente, False)
 
-    except GHLToken.DoesNotExist:
-        logger.warning(f"No existe token para agencia {location_id}")
+    except Exception as e:
+        logger.error(f"Error obteniendo token para agencia {location_id}: {str(e)}")
 
 def initialize_ghl_setup(access_token, location_id, agencia):
     """
