@@ -8,15 +8,23 @@ from .models import Cliente, Propiedad
 
 def clean_currency(value):
     """
-    Limpia y convierte un valor de moneda a float.
-    Maneja formatos como '$1234,56' o '1234,56'.
+    Este debug es muy simple y sencillo. SOLO SOPORTA EUROS Y DOLARES
     """
     if not value:
         return 0.0
-    try:
-        return float(str(value).replace("€","").replace('$', '').replace(".","").replace(',', '.').strip())
-    except ValueError:
-        return 0.0
+    simbolo = value[0]
+    cuerpo = value[1:].strip()
+
+    if simbolo == "$":
+        resultado = cuerpo.replace(",", "")
+        
+    elif simbolo == "€":
+        resultado = cuerpo.replace(".", "").replace(",", ".")
+        
+    else:
+        raise ValueError(f"MONEDA NO SOPORTADA: '{simbolo}'. Añade un 'elif' para ella.")
+
+    return float(resultado)
 
 
 def clean_int(value):
