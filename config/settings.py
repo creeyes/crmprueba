@@ -208,7 +208,7 @@ if not DEBUG:
         'https://app.gohighlevel.com',
         'https://widgets.leadconnectorhq.com',
         'https://api.leadconnectorhq.com',
-        'https://webprueba-git-main-creeyes96-gmailcoms-projects.vercel.app',
+        'https://webprueba-olive.vercel.app',
     ]
     # Añadir dominios de Railway si están configurados
     _railway_url = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '')
@@ -218,6 +218,7 @@ if not DEBUG:
 CORS_ALLOW_CREDENTIALS = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
+
 
 
 
