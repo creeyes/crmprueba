@@ -185,12 +185,18 @@ class WebhookPropiedadView(APIView):
                 return Response({'error': 'Missing Record ID'}, status=400)
 
             with transaction.atomic():
+                # Determinar visibilidad en web según checkbox de portales
+                estado_base = estadoPropTrad(custom_data.get("estado"))
+                publicar_en_raw = custom_data.get('publicar_en', [])
+                portales = [p.strip().lower() for p in publicar_en_raw] if isinstance(publicar_en_raw, list) else [p.strip().lower() for p in str(publicar_en_raw).split(',') if p.strip()]
+                estado_final = 'noficial' if estado_base == 'activo' and 'web' not in portales else estado_base
+
                 prop_data = {
                     'agencia': agencia,
                     'ghl_contact_id': ghl_record_id,
                     'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
                     'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
-                    'estado': estadoPropTrad(custom_data.get("estado")),
+                    'estado': estado_final,
                     'animales': preferenciasTraductor1(custom_data.get('animales')),
                     'metros': clean_int(custom_data.get('metros')),
                     'balcon': preferenciasTraductor1(custom_data.get('balcon')),
@@ -507,4 +513,5 @@ class UniversalDeleteView(APIView):
         except Exception as e:
             logger.error(f"Error en UniversalDeleteView: {str(e)}", exc_info=True)
             return Response({"error": "Error interno"}, status=500)
+
 
