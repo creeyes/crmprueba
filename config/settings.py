@@ -184,36 +184,41 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '[{asctime}] {levelname} [{name}:{lineno}] {message}',
+            'format': '{levelname} {asctime} {module} {message}',
             'style': '{',
         },
     },
     'handlers': {
         'console': {
-            'level': 'INFO',
+            'level': 'WARNING',  # <--- CAMBIO CLAVE: El handler solo deja pasar lo importante
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
     },
     'loggers': {
-        # 1. Silencia los logs de peticiones 200/300 de Django (el "ruido" principal)
+        # Silencia el flujo de peticiones HTTP (los GET /admin/... 200 OK)
         'django.server': {
             'handlers': ['console'],
-            'level': 'WARNING', 
+            'level': 'WARNING',
             'propagate': False,
         },
-        # 2. Registra errores críticos de la aplicación
-        'django': {
+        # Silencia info sobre carga de archivos, sesiones y peticiones generales
+        'django.request': {
             'handlers': ['console'],
-            'level': 'ERROR',
+            'level': 'WARNING',
             'propagate': False,
         },
-        # 3. Tu código: permite INFO para ver eventos importantes que tú definas
-        'tu_proyecto': { # Reemplaza por el nombre de tu carpeta de proyecto
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
+        # Tu aplicación: aquí sí puedes dejar INFO si quieres ver TUS mensajes
+        # 'tu_app_name': { 
+        #     'handlers': ['console'],
+        #     'level': 'INFO',
+        #     'propagate': False,
+        # },
+    },
+    # Root ahora en WARNING para que ninguna librería externa hable de más
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',
     },
 }
 
@@ -256,6 +261,7 @@ if not DEBUG:
 CORS_ALLOW_CREDENTIALS = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
+
 
 
 
