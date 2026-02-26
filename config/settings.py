@@ -157,12 +157,34 @@ CSP_FRAME_ANCESTORS = "'self' https://app.gohighlevel.com https://*.leadconnecto
 
 
 # --- LOGGING (CRÍTICO PARA VER ERRORES EN RAILWAY) ---
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'formatters': {
+#         'verbose': {
+#             'format': '{levelname} {asctime} {module} {message}',
+#             'style': '{',
+#         },
+#     },
+#     'handlers': {
+#         'console': {
+#             'level': 'INFO',
+#             'class': 'logging.StreamHandler',
+#             'formatter': 'verbose',
+#         },
+#     },
+#     'root': {
+#         'handlers': ['console'],
+#         'level': 'INFO',
+#     },
+# }
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
+            'format': '[{asctime}] {levelname} [{name}:{lineno}] {message}',
             'style': '{',
         },
     },
@@ -173,9 +195,25 @@ LOGGING = {
             'formatter': 'verbose',
         },
     },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
+    'loggers': {
+        # 1. Silencia los logs de peticiones 200/300 de Django (el "ruido" principal)
+        'django.server': {
+            'handlers': ['console'],
+            'level': 'WARNING', 
+            'propagate': False,
+        },
+        # 2. Registra errores críticos de la aplicación
+        'django': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        # 3. Tu código: permite INFO para ver eventos importantes que tú definas
+        'tu_proyecto': { # Reemplaza por el nombre de tu carpeta de proyecto
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
 
@@ -218,6 +256,7 @@ if not DEBUG:
 CORS_ALLOW_CREDENTIALS = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
+
 
 
 
