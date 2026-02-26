@@ -157,70 +157,28 @@ CSP_FRAME_ANCESTORS = "'self' https://app.gohighlevel.com https://*.leadconnecto
 
 
 # --- LOGGING (CRÍTICO PARA VER ERRORES EN RAILWAY) ---
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-#     'formatters': {
-#         'verbose': {
-#             'format': '{levelname} {asctime} {module} {message}',
-#             'style': '{',
-#         },
-#     },
-#     'handlers': {
-#         'console': {
-#             'level': 'INFO',
-#             'class': 'logging.StreamHandler',
-#             'formatter': 'verbose',
-#         },
-#     },
-#     'root': {
-#         'handlers': ['console'],
-#         'level': 'INFO',
-#     },
-# }
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}
 
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-#     'formatters': {
-#         'verbose': {
-#             'format': '{levelname} {asctime} {module} {message}',
-#             'style': '{',
-#         },
-#     },
-#     'handlers': {
-#         'console': {
-#             'level': 'WARNING',  # <--- CAMBIO CLAVE: El handler solo deja pasar lo importante
-#             'class': 'logging.StreamHandler',
-#             'formatter': 'verbose',
-#         },
-#     },
-#     'loggers': {
-#         # Silencia el flujo de peticiones HTTP (los GET /admin/... 200 OK)
-#         'django.server': {
-#             'handlers': ['console'],
-#             'level': 'WARNING',
-#             'propagate': False,
-#         },
-#         # Silencia info sobre carga de archivos, sesiones y peticiones generales
-#         'django.request': {
-#             'handlers': ['console'],
-#             'level': 'WARNING',
-#             'propagate': False,
-#         },
-#         # Tu aplicación: aquí sí puedes dejar INFO si quieres ver TUS mensajes
-#         # 'tu_app_name': { 
-#         #     'handlers': ['console'],
-#         #     'level': 'INFO',
-#         #     'propagate': False,
-#         # },
-#     },
-#     # Root ahora en WARNING para que ninguna librería externa hable de más
-#     'root': {
-#         'handlers': ['console'],
-#         'level': 'WARNING',
-#     },
-# }
 
 
 # --- CONFIGURACIÓN "EL CRUZADO" (OAUTH2 GHL MARKETPLACE) ---
@@ -261,6 +219,7 @@ if not DEBUG:
 CORS_ALLOW_CREDENTIALS = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
+
 
 
 
