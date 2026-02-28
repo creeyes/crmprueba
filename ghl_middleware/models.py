@@ -135,7 +135,7 @@ class Propiedad(models.Model):
     patioInterior = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
 
     sync_status = models.CharField(
-        max_length=20, choices=SyncStatus.choices, default=SyncStatus.SYNCED,
+        max_length=20, choices=SyncStatus.choices, default=SyncStatus.PENDING,
         db_index=True, help_text="Estado de sincronizacion con GHL"
     )
     sync_error = models.TextField(blank=True, default='', help_text="Ultimo error de sincronizacion")
@@ -206,7 +206,7 @@ class Cliente(models.Model):
     patioInterior = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
 
     sync_status = models.CharField(
-        max_length=20, choices=SyncStatus.choices, default=SyncStatus.SYNCED,
+        max_length=20, choices=SyncStatus.choices, default=SyncStatus.PENDING,
         db_index=True, help_text="Estado de sincronizacion con GHL"
     )
     sync_error = models.TextField(blank=True, default='', help_text="Ultimo error de sincronizacion")
@@ -225,3 +225,4 @@ class Cliente(models.Model):
 
     def __str__(self):
         return f"Cliente {self.nombre}"
+
