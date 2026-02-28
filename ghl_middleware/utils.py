@@ -702,24 +702,37 @@ def ghl_create_contact(access_token, location_id, cliente):
     first_name = parts[0]
     last_name = parts[1] if len(parts) > 1 else ""
 
-    # Zonas de interes como string separado por comas
-    zonas = list(cliente.zona_interes.values_list('nombre', flat=True))
-    zona_str = ", ".join(zonas) if zonas else ""
+    # 1. Zonas de interes como LISTA (Array), no como string
+    zonas_list = list(cliente.zona_interes.values_list('nombre', flat=True))
+
+    # 2. Construimos los Custom Fields usando las UNIQUE KEYS exactas de GHL
+    custom_fields = [
+        {"key": "presupuesto_mximo", "field_value": format_currency_eur(cliente.presupuesto_maximo)},
+        {"key": "habitaciones_minimas", "field_value": str(cliente.habitaciones_minimas)},
+        {"key": "ha_de_permitir_animales", "field_value": preferencias_inversa_1(cliente.animales)},
+        {"key": "metros_cuadrados_mnimos_de_la_propiedad_deseada", "field_value": str(cliente.metrosMinimo)},
+        {"key": "ha_de_tener_balcn", "field_value": preferencias_inversa_2(cliente.balcon)},
+        {"key": "ha_de_tener_garaje", "field_value": preferencias_inversa_2(cliente.garaje)},
+        {"key": "ha_de_tener_patio_interior", "field_value": preferencias_inversa_2(cliente.patioInterior)}
+    ]
+
+    # 3. Mapeo inteligente para el campo múltiple de Zonas
+    if cliente.agencia.ghl_custom_field_cliente_zona:
+        custom_fields.append({
+            "id": cliente.agencia.ghl_custom_field_cliente_zona,
+            "field_value": zonas_list
+        })
+    else:
+        custom_fields.append({
+            "key": "zonas_deseadas", 
+            "field_value": zonas_list
+        })
 
     payload = {
         "firstName": first_name,
         "lastName": last_name,
         "locationId": location_id,
-        "customFields": [
-            {"key": "presupuesto", "field_value": format_currency_eur(cliente.presupuesto_maximo)},
-            {"key": "habitaciones", "field_value": str(cliente.habitaciones_minimas)},
-            {"key": "zona_interes", "field_value": zona_str},
-            {"key": "animales", "field_value": preferencias_inversa_1(cliente.animales)},
-            {"key": "metros", "field_value": str(cliente.metrosMinimo)},
-            {"key": "balcon", "field_value": preferencias_inversa_2(cliente.balcon)},
-            {"key": "garaje", "field_value": preferencias_inversa_2(cliente.garaje)},
-            {"key": "patioInterior", "field_value": preferencias_inversa_2(cliente.patioInterior)}
-        ]
+        "customFields": custom_fields
     }
 
     try:
@@ -736,7 +749,6 @@ def ghl_create_contact(access_token, location_id, cliente):
     except Exception as e:
         logger.error(f"Excepcion creando contacto en GHL: {str(e)}", exc_info=True)
         return None
-
 
 def ghl_create_property_record(access_token, location_id, property_object_id, propiedad):
     """
@@ -884,4 +896,5 @@ def sync_record_to_ghl(record, record_type):
         record.sync_error = str(e)[:500]
         record.save(update_fields=['sync_status', 'sync_error'])
         return False
+
 
