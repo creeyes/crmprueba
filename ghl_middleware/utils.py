@@ -710,16 +710,16 @@ def ghl_create_contact(access_token, location_id, cliente):
         "firstName": first_name,
         "lastName": last_name,
         "locationId": location_id,
-        "customField": {
-            "presupuesto": format_currency_eur(cliente.presupuesto_maximo),
-            "habitaciones": str(cliente.habitaciones_minimas),
-            "zona_interes": zona_str,
-            "animales": preferencias_inversa_1(cliente.animales),
-            "metros": str(cliente.metrosMinimo),
-            "balcon": preferencias_inversa_2(cliente.balcon),
-            "garaje": preferencias_inversa_2(cliente.garaje),
-            "patioInterior": preferencias_inversa_2(cliente.patioInterior),
-        }
+        "customFields": [
+            {"key": "presupuesto", "field_value": format_currency_eur(cliente.presupuesto_maximo)},
+            {"key": "habitaciones", "field_value": str(cliente.habitaciones_minimas)},
+            {"key": "zona_interes", "field_value": zona_str},
+            {"key": "animales", "field_value": preferencias_inversa_1(cliente.animales)},
+            {"key": "metros", "field_value": str(cliente.metrosMinimo)},
+            {"key": "balcon", "field_value": preferencias_inversa_2(cliente.balcon)},
+            {"key": "garaje", "field_value": preferencias_inversa_2(cliente.garaje)},
+            {"key": "patioInterior", "field_value": preferencias_inversa_2(cliente.patioInterior)}
+        ]
     }
 
     try:
@@ -884,3 +884,4 @@ def sync_record_to_ghl(record, record_type):
         record.sync_error = str(e)[:500]
         record.save(update_fields=['sync_status', 'sync_error'])
         return False
+
