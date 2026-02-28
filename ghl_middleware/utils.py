@@ -4,11 +4,17 @@ from urllib3.util.retry import Retry
 import logging
 import time
 import random
+import threading
+from collections import OrderedDict
 from datetime import timedelta
 from django.utils import timezone
 from django.conf import settings
 from django.db import transaction
 from .models import GHLToken, Zona
+from .helpers import (
+    format_currency_eur, preferencias_inversa_1, preferencias_inversa_2,
+    estado_prop_inversa, imagenes_para_ghl
+)
 
 
 logger = logging.getLogger(__name__)
@@ -66,6 +72,49 @@ def rate_limit_wait(response=None, default_wait=0.2):
             return
 
     time.sleep(default_wait)
+
+
+# --- BOUNCE-BACK PREVENTION CACHE ---
+
+class RecentSyncCache:
+    """
+    Cache thread-safe de IDs que acabamos de crear en GHL.
+    Previene que el webhook bounce-back cree duplicados o re-procese matching.
+    Los IDs expiran despues de TTL segundos.
+    """
+    def __init__(self, ttl=60):
+        self._cache = OrderedDict()
+        self._lock = threading.Lock()
+        self._ttl = ttl
+
+    def add(self, ghl_id):
+        """Registra un ID recien creado en GHL."""
+        with self._lock:
+            self._cache[ghl_id] = time.time()
+            self._cleanup()
+
+    def check_and_remove(self, ghl_id):
+        """Retorna True si el ID fue creado recientemente por nosotros (bounce-back)."""
+        with self._lock:
+            self._cleanup()
+            if ghl_id in self._cache:
+                del self._cache[ghl_id]
+                return True
+            return False
+
+    def _cleanup(self):
+        """Elimina entradas expiradas."""
+        now = time.time()
+        while self._cache:
+            oldest_key, oldest_time = next(iter(self._cache.items()))
+            if now - oldest_time > self._ttl:
+                del self._cache[oldest_key]
+            else:
+                break
+
+
+# Singleton global para bounce-back detection
+_recent_syncs = RecentSyncCache(ttl=60)
 
 
 # --- TOKEN AUTO-REFRESH ---
@@ -596,14 +645,19 @@ def initialize_ghl_setup(access_token, location_id, agencia):
         
         # 6. Guardar en Agencia
         updated = False
+
+        # Guardar el property_object_id para usarlo al crear propiedades via API
+        agencia.property_object_id = prop_obj_id
+        updated = True
+
         if assoc_id:
             agencia.association_type_id = assoc_id
             updated = True
-        
+
         if fields_map.get('zona_cliente'):
             agencia.ghl_custom_field_cliente_zona = fields_map['zona_cliente']
             updated = True
-            
+
         if fields_map.get('zona_propiedad'):
             agencia.ghl_custom_field_propiedad_zona = fields_map['zona_propiedad']
             updated = True
@@ -621,5 +675,212 @@ def initialize_ghl_setup(access_token, location_id, agencia):
         logger.info("Limpiando registros dummy...")
         delete_dummy_contact(access_token, contact_id)
         delete_dummy_property(access_token, prop_obj_id, prop_record_id)
-    
+
     return True
+
+
+# --- FUNCIONES DE CREACION EN GHL (DB → GHL) ---
+
+def ghl_create_contact(access_token, location_id, cliente):
+    """
+    Crea un contacto real en GHL a partir de un Cliente local.
+    Mapeo inverso de WebhookClienteView.
+    Retorna el ghl_contact_id si tiene exito, None si falla.
+    """
+    rate_limit_wait()
+
+    url = "https://services.leadconnectorhq.com/contacts/"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Version": "2021-07-28",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    # Split nombre en firstName/lastName
+    parts = (cliente.nombre or "Desconocido").split(" ", 1)
+    first_name = parts[0]
+    last_name = parts[1] if len(parts) > 1 else ""
+
+    # Zonas de interes como string separado por comas
+    zonas = list(cliente.zona_interes.values_list('nombre', flat=True))
+    zona_str = ", ".join(zonas) if zonas else ""
+
+    payload = {
+        "firstName": first_name,
+        "lastName": last_name,
+        "locationId": location_id,
+        "customField": {
+            "presupuesto": format_currency_eur(cliente.presupuesto_maximo),
+            "habitaciones": str(cliente.habitaciones_minimas),
+            "zona_interes": zona_str,
+            "animales": preferencias_inversa_1(cliente.animales),
+            "metros": str(cliente.metrosMinimo),
+            "balcon": preferencias_inversa_2(cliente.balcon),
+            "garaje": preferencias_inversa_2(cliente.garaje),
+            "patioInterior": preferencias_inversa_2(cliente.patioInterior),
+        }
+    }
+
+    try:
+        response = _http_session.post(url, headers=headers, json=payload, timeout=10)
+        rate_limit_wait(response, default_wait=0)
+
+        if response.status_code in [200, 201]:
+            contact_id = response.json().get('contact', {}).get('id')
+            logger.info(f"Contacto creado en GHL: {contact_id} para Cliente local PK={cliente.pk}")
+            return contact_id
+        else:
+            logger.error(f"Error creando contacto en GHL: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Excepcion creando contacto en GHL: {str(e)}", exc_info=True)
+        return None
+
+
+def ghl_create_property_record(access_token, location_id, property_object_id, propiedad):
+    """
+    Crea un registro de propiedad real en GHL a partir de una Propiedad local.
+    Mapeo inverso de WebhookPropiedadView.
+    Retorna el ghl_record_id si tiene exito, None si falla.
+    """
+    rate_limit_wait()
+
+    url = f"https://services.leadconnectorhq.com/objects/{property_object_id}/records/"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Version": "2021-07-28",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    # Zona: nombre a formato underscore (inverso de webhook parsing)
+    zona_value = ""
+    if propiedad.zona:
+        zona_value = propiedad.zona.nombre.lower().strip().replace(" ", "_")
+
+    properties = {
+        "precio": format_currency_eur(propiedad.precio),
+        "habitaciones": str(propiedad.habitaciones),
+        "estado": estado_prop_inversa(propiedad.estado),
+        "animales": preferencias_inversa_1(propiedad.animales),
+        "metros": str(propiedad.metros),
+        "balcon": preferencias_inversa_1(propiedad.balcon),
+        "garaje": preferencias_inversa_1(propiedad.garaje),
+        "patioInterior": preferencias_inversa_1(propiedad.patioInterior),
+        "zona": zona_value,
+        "imagenesUrl": imagenes_para_ghl(propiedad.imagenesUrl),
+    }
+
+    payload = {
+        "locationId": location_id,
+        "properties": properties,
+    }
+
+    try:
+        response = _http_session.post(url, headers=headers, json=payload, timeout=10)
+        rate_limit_wait(response, default_wait=0)
+
+        if response.status_code in [200, 201]:
+            record_id = response.json().get('record', {}).get('id')
+            logger.info(f"Propiedad creada en GHL: {record_id} para Propiedad local PK={propiedad.pk}")
+            return record_id
+        else:
+            logger.error(f"Error creando propiedad en GHL: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Excepcion creando propiedad en GHL: {str(e)}", exc_info=True)
+        return None
+
+
+def sync_record_to_ghl(record, record_type):
+    """
+    Sincroniza un registro local (Cliente o Propiedad) con GHL.
+    1. Obtiene token valido
+    2. Marca como 'syncing'
+    3. Crea en GHL
+    4. Registra en cache anti-bounce-back
+    5. Guarda ghl_contact_id + sync_status='synced'
+    6. Ejecuta matching y sincroniza asociaciones
+
+    record_type: 'cliente' o 'propiedad'
+    Retorna True si fue exitoso, False si fallo.
+    """
+    from .models import Propiedad
+    from .matching import (
+        buscar_clientes_para_propiedad, buscar_propiedades_para_cliente,
+        actualizar_relaciones_propiedad, actualizar_relaciones_cliente
+    )
+    from .tasks import sync_associations_background
+
+    location_id = record.agencia.location_id
+    access_token = get_valid_token(location_id)
+
+    if not access_token:
+        logger.error(f"No se pudo obtener token para sync de {record_type} PK={record.pk}")
+        record.sync_status = 'error'
+        record.sync_error = 'No se pudo obtener token de acceso'
+        record.save(update_fields=['sync_status', 'sync_error'])
+        return False
+
+    # Marcar como syncing (previene intentos concurrentes)
+    record.sync_status = 'syncing'
+    record.save(update_fields=['sync_status'])
+
+    try:
+        if record_type == 'cliente':
+            ghl_id = ghl_create_contact(access_token, location_id, record)
+        else:
+            # Necesita property_object_id de la Agencia
+            prop_obj_id = record.agencia.property_object_id
+            if not prop_obj_id:
+                prop_obj_id = get_property_object_id(access_token, location_id)
+                if prop_obj_id:
+                    record.agencia.property_object_id = prop_obj_id
+                    record.agencia.save(update_fields=['property_object_id'])
+                else:
+                    raise Exception("No se pudo obtener property_object_id de GHL")
+            ghl_id = ghl_create_property_record(access_token, location_id, prop_obj_id, record)
+
+        if not ghl_id:
+            raise Exception(f"GHL API no retorno ID para {record_type}")
+
+        # Registrar en cache anti-bounce-back ANTES de guardar
+        _recent_syncs.add(ghl_id)
+
+        # Actualizar registro local con GHL ID
+        record.ghl_contact_id = ghl_id
+        record.sync_status = 'synced'
+        record.sync_error = ''
+        record.save(update_fields=['ghl_contact_id', 'sync_status', 'sync_error'])
+
+        # Ejecutar matching (misma logica que los webhook handlers)
+        if record_type == 'propiedad' and record.estado == Propiedad.estadoPiso.ACTIVO:
+            clientes_match = buscar_clientes_para_propiedad(record, record.agencia)
+            actualizar_relaciones_propiedad(record, clientes_match)
+            if record.agencia.association_type_id:
+                target_ids = [c.ghl_contact_id for c in clientes_match if c.ghl_contact_id]
+                sync_associations_background(
+                    access_token, location_id, record.ghl_contact_id,
+                    target_ids, record.agencia.association_type_id
+                )
+        elif record_type == 'cliente':
+            propiedades_match = buscar_propiedades_para_cliente(record, record.agencia)
+            actualizar_relaciones_cliente(record, propiedades_match)
+            if record.agencia.association_type_id:
+                target_ids = [p.ghl_contact_id for p in propiedades_match if p.ghl_contact_id]
+                sync_associations_background(
+                    access_token, location_id, record.ghl_contact_id,
+                    target_ids, record.agencia.association_type_id,
+                    origin_is_contact=True
+                )
+
+        logger.info(f"Sync exitoso: {record_type} PK={record.pk} -> GHL ID={ghl_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error sincronizando {record_type} PK={record.pk}: {str(e)}", exc_info=True)
+        record.sync_status = 'error'
+        record.sync_error = str(e)[:500]
+        record.save(update_fields=['sync_status', 'sync_error'])
+        return False

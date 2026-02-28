@@ -13,7 +13,7 @@ from django.db import transaction
 
 from .models import Agencia, Propiedad, Cliente, GHLToken, Provincia, Municipio, Zona
 from .tasks import sync_associations_background, funcionAsyncronaZonas
-from .utils import get_valid_token, get_association_type_id, initialize_ghl_setup, get_location_name
+from .utils import get_valid_token, get_association_type_id, initialize_ghl_setup, get_location_name, _recent_syncs
 from .helpers import (
     clean_currency, clean_int, preferenciasTraductor1,
     preferenciasTraductor2, estadoPropTrad, guardadorURL
@@ -184,6 +184,11 @@ class WebhookPropiedadView(APIView):
             if not ghl_record_id:
                 return Response({'error': 'Missing Record ID'}, status=400)
 
+            # Bounce-back prevention: si nosotros creamos este registro, ignorar webhook
+            if _recent_syncs.check_and_remove(ghl_record_id):
+                logger.info(f"Bounce-back webhook detectado para Propiedad {ghl_record_id}. Ignorando.")
+                return Response({'status': 'bounce_back'})
+
             with transaction.atomic():
                 # Determinar visibilidad en web según checkbox de portales
                 estado_base = estadoPropTrad(custom_data.get("estado"))
@@ -280,6 +285,11 @@ class WebhookClienteView(APIView):
             ghl_contact_id = data.get('id') or custom_data.get('contact_id')
             if not ghl_contact_id:
                 return Response({'error': 'Missing Contact ID'}, status=400)
+
+            # Bounce-back prevention: si nosotros creamos este contacto, ignorar webhook
+            if _recent_syncs.check_and_remove(ghl_contact_id):
+                logger.info(f"Bounce-back webhook detectado para Cliente {ghl_contact_id}. Ignorando.")
+                return Response({'status': 'bounce_back'})
 
             with transaction.atomic():
                 # Fix: Capturar las propiedades con las que coincidia ANTES de actualizar

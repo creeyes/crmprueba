@@ -100,6 +100,34 @@ def funcionAsyncronaZonas():
     _executor.submit(actualizacion_zonas_agencias)
 
 
+def sync_to_ghl_background(record_pk, record_type):
+    """
+    Envia un registro local a GHL en background.
+    Usado por Django signals cuando se crea un registro via ORM sin ghl_contact_id.
+
+    record_type: 'cliente' o 'propiedad'
+    """
+    def _worker():
+        from .models import Cliente, Propiedad
+        from .utils import sync_record_to_ghl
+
+        try:
+            if record_type == 'cliente':
+                record = Cliente.objects.get(pk=record_pk)
+            else:
+                record = Propiedad.objects.get(pk=record_pk)
+
+            sync_record_to_ghl(record, record_type)
+
+        except (Cliente.DoesNotExist, Propiedad.DoesNotExist):
+            logger.error(f"Registro {record_type} PK={record_pk} no encontrado para sync")
+        except Exception as e:
+            logger.error(f"Error en sync background {record_type} PK={record_pk}: {str(e)}", exc_info=True)
+
+    future = _executor.submit(_worker)
+    future.add_done_callback(lambda f: f.result() if not f.exception() else logger.error(f"Sync task failed: {f.exception()}"))
+
+
 def shutdown_executor():
     """Cierra el pool de hilos limpiamente."""
     _executor.shutdown(wait=True)

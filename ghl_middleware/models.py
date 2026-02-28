@@ -57,6 +57,11 @@ class Agencia(models.Model):
         help_text="Precio minimo para marcar una propiedad como destacada (isFeatured)"
     )
 
+    property_object_id = models.CharField(
+        max_length=255, blank=True, null=True,
+        help_text="ID del Custom Object 'Propiedad' en GHL (cacheado del setup)"
+    )
+
     # IDs de campos personalizados en GHL para sincronizar zonas (por agencia)
     ghl_custom_field_propiedad_zona = models.CharField(
         max_length=255, blank=True, null=True,
@@ -106,9 +111,18 @@ class Propiedad(models.Model):
         VENDIDO = "vendido", "Vendido"
         NoOficial = "noficial", "No Oficial"
 
+    class SyncStatus(models.TextChoices):
+        PENDING = "pending", "Pendiente de sync"
+        SYNCING = "syncing", "Sincronizando"
+        SYNCED = "synced", "Sincronizado"
+        ERROR = "error", "Error de sync"
+
     agencia = models.ForeignKey(Agencia, on_delete=models.CASCADE, related_name='propiedades')
-    ghl_contact_id = models.CharField(max_length=255, help_text="ID del REGISTRO (Record ID) del Custom Object en GHL")
-    
+    ghl_contact_id = models.CharField(
+        max_length=255, blank=True, null=True,
+        help_text="ID del REGISTRO (Record ID) del Custom Object en GHL"
+    )
+
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     zona = models.ForeignKey(Zona, blank=True, null=True, related_name="propiedades", on_delete=models.SET_NULL)
     habitaciones = models.IntegerField(default=0, help_text="Nº de habitaciones que tiene la propiedad")
@@ -120,9 +134,20 @@ class Propiedad(models.Model):
     garaje = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
     patioInterior = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
 
+    sync_status = models.CharField(
+        max_length=20, choices=SyncStatus.choices, default=SyncStatus.SYNCED,
+        db_index=True, help_text="Estado de sincronizacion con GHL"
+    )
+    sync_error = models.TextField(blank=True, default='', help_text="Ultimo error de sincronizacion")
+
     class Meta:
-        unique_together = ('agencia', 'ghl_contact_id')
-        # CORRECCIÓN #36: Índices compuestos para consultas frecuentes de filtrado
+        constraints = [
+            models.UniqueConstraint(
+                fields=['agencia', 'ghl_contact_id'],
+                name='unique_propiedad_agencia_ghl_id',
+                condition=models.Q(ghl_contact_id__isnull=False),
+            ),
+        ]
         indexes = [
             models.Index(fields=['agencia', 'estado', 'precio'], name='prop_agencia_estado_precio_idx'),
             models.Index(fields=['agencia', 'zona'], name='prop_agencia_zona_idx'),
@@ -144,9 +169,18 @@ class Cliente(models.Model):
         SI = "si", "Si"
         IND = "ind", "Indiferente"
 
+    class SyncStatus(models.TextChoices):
+        PENDING = "pending", "Pendiente de sync"
+        SYNCING = "syncing", "Sincronizando"
+        SYNCED = "synced", "Sincronizado"
+        ERROR = "error", "Error de sync"
+
 
     agencia = models.ForeignKey(Agencia, on_delete=models.CASCADE, related_name='clientes')
-    ghl_contact_id = models.CharField(max_length=255, help_text="ID del CONTACTO en GHL")
+    ghl_contact_id = models.CharField(
+        max_length=255, blank=True, null=True,
+        help_text="ID del CONTACTO en GHL"
+    )
     nombre = models.CharField(max_length=255, blank=True, default="Desconocido")
     presupuesto_maximo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     zona_interes = models.ManyToManyField(Zona, blank=True, related_name="clientes")
@@ -156,12 +190,12 @@ class Cliente(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # NUEVO CAMPO DE RELACIÓN (Many-to-Many): 
+    # NUEVO CAMPO DE RELACIÓN (Many-to-Many):
     # Esto permite guardar qué propiedades se han emparejado con este cliente.
     # 'blank=True' permite crear clientes sin propiedades asignadas.
     propiedades_interes = models.ManyToManyField(
-        Propiedad, 
-        related_name='interesados', 
+        Propiedad,
+        related_name='interesados',
         blank=True,
         help_text="Historial de propiedades que hacen match con este cliente"
     )
@@ -171,9 +205,20 @@ class Cliente(models.Model):
     garaje = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
     patioInterior = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
 
+    sync_status = models.CharField(
+        max_length=20, choices=SyncStatus.choices, default=SyncStatus.SYNCED,
+        db_index=True, help_text="Estado de sincronizacion con GHL"
+    )
+    sync_error = models.TextField(blank=True, default='', help_text="Ultimo error de sincronizacion")
+
     class Meta:
-        unique_together = ('agencia', 'ghl_contact_id')
-        # CORRECCIÓN #36: Índice compuesto para consultas frecuentes
+        constraints = [
+            models.UniqueConstraint(
+                fields=['agencia', 'ghl_contact_id'],
+                name='unique_cliente_agencia_ghl_id',
+                condition=models.Q(ghl_contact_id__isnull=False),
+            ),
+        ]
         indexes = [
             models.Index(fields=['agencia', 'presupuesto_maximo'], name='cli_agencia_presupuesto_idx'),
         ]
