@@ -218,7 +218,8 @@ class WebhookPropiedadView(APIView):
 
                 zona = custom_data.get("zona")
                 if zona:
-                    zona_limpio = zona.replace("_", " ").lower().strip()
+                    zona_nombre_bruto = zona.split("__")[0]
+                    zona_limpio = zona_nombre_bruto.replace("_", " ").lower().strip()
                     zona_obj = Zona.objects.filter(nombre__iexact=zona_limpio).first()
                     if zona_obj:
                         propiedad.zona = zona_obj
@@ -321,7 +322,17 @@ class WebhookClienteView(APIView):
 
                 zona_nombre = custom_data.get("zona_interes")
                 if zona_nombre:
-                    zona_lista = [z.strip() for z in str(zona_nombre).split(",")]
+                    if isinstance(zona_nombre, list):
+                        zona_lista_bruta = [str(z).strip() for z in zona_nombre]
+                    else:
+                        zona_lista_bruta = [z.strip() for z in str(zona_nombre).split(",")]
+                        
+                    zona_lista = []
+                    for z in zona_lista_bruta:
+                        z_nombre = z.split("--")[0].strip()
+                        if z_nombre:
+                            zona_lista.append(z_nombre)
+
                     logger.debug(f"Procesando zonas de interes para {ghl_contact_id}: {zona_lista}")
 
                     zonas = Zona.objects.filter(nombre__in=zona_lista)

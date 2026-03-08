@@ -574,9 +574,14 @@ def delete_dummy_property(access_token, property_object_id, record_id):
 def actualizarAgenciaIndividualZona(agencia, location_id):
     opciones_propiedad = []
     opciones_cliente = []
-    for zona in Zona.objects.all():
-        label = zona.nombre
-        value = label.lower().strip().replace(" ", "_")
+    for zona in Zona.objects.select_related('municipio', 'municipio__provincia').all():
+        nombre_zona = zona.nombre
+        nombre_municipio = zona.municipio.nombre
+        nombre_provincia = zona.municipio.provincia.nombre
+
+        label = f"{nombre_zona} -- {nombre_municipio} -- {nombre_provincia}"
+        value = f"{nombre_zona}__{nombre_municipio}__{nombre_provincia}".lower().replace(" ", "_")
+
         # Los nombres de abajo han de ser así. No estan mal puestos.
         opciones_propiedad.append({
             "key": value,
@@ -703,7 +708,10 @@ def ghl_create_contact(access_token, location_id, cliente):
     last_name = parts[1] if len(parts) > 1 else ""
 
     # 1. Zonas de interes como LISTA (Array), no como string
-    zonas_list = list(cliente.zona_interes.values_list('nombre', flat=True))
+    zonas_list = []
+    for zona in cliente.zona_interes.select_related('municipio', 'municipio__provincia').all():
+        label = f"{zona.nombre} -- {zona.municipio.nombre} -- {zona.municipio.provincia.nombre}"
+        zonas_list.append(label)
 
     # 2. Construimos los Custom Fields usando las UNIQUE KEYS exactas de GHL
     custom_fields = [
@@ -769,7 +777,8 @@ def ghl_create_property_record(access_token, location_id, property_object_id, pr
     # Zona: nombre a formato underscore (inverso de webhook parsing)
     zona_value = ""
     if propiedad.zona:
-        zona_value = propiedad.zona.nombre.lower().strip().replace(" ", "_")
+        z = propiedad.zona
+        zona_value = f"{z.nombre}__{z.municipio.nombre}__{z.municipio.provincia.nombre}".lower().replace(" ", "_")
 
     properties = {
         "precio": format_currency_eur(propiedad.precio),

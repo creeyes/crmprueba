@@ -59,9 +59,14 @@ def funcionAsyncronaZonas():
         try:
             opciones_propiedad = []
             opciones_cliente = []
-            for zona in Zona.objects.all():
-                label = zona.nombre
-                value = label.lower().strip().replace(" ", "_")
+            for zona in Zona.objects.select_related('municipio', 'municipio__provincia').all():
+                nombre_zona = zona.nombre
+                nombre_municipio = zona.municipio.nombre
+                nombre_provincia = zona.municipio.provincia.nombre
+
+                label = f"{nombre_zona} -- {nombre_municipio} -- {nombre_provincia}"
+                value = f"{nombre_zona}__{nombre_municipio}__{nombre_provincia}".lower().replace(" ", "_")
+
                 # Los nombres de abajo han de ser así. No estan mal puestos.
                 opciones_propiedad.append({
                     "key": value,
