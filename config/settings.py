@@ -210,6 +210,7 @@ if not DEBUG:
         'https://widgets.leadconnectorhq.com',
         'https://api.leadconnectorhq.com',
         'https://webprueba-olive.vercel.app',
+        'https://pagprop.vercel.app',
     ]
     # Añadir dominios de Railway si están configurados
     _railway_url = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '')
@@ -219,6 +220,7 @@ if not DEBUG:
 CORS_ALLOW_CREDENTIALS = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
+
 
 
 
