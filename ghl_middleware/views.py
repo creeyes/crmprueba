@@ -194,7 +194,6 @@ class WebhookPropiedadView(APIView):
                 estado_base = estadoPropTrad(custom_data.get("estado"))
                 publicar_en_raw = custom_data.get('publicar_en', [])
                 portales = [p.strip().lower() for p in publicar_en_raw] if isinstance(publicar_en_raw, list) else [p.strip().lower() for p in str(publicar_en_raw).split(',') if p.strip()]
-                estado_final = 'noficial' if estado_base == 'activo' and 'web' not in portales else estado_base
 
                 prop_data = {
                     'agencia': agencia,
@@ -534,5 +533,6 @@ class UniversalDeleteView(APIView):
         except Exception as e:
             logger.error(f"Error en UniversalDeleteView: {str(e)}", exc_info=True)
             return Response({"error": "Error interno"}, status=500)
+
 
 
