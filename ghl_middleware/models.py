@@ -127,7 +127,7 @@ class Propiedad(models.Model):
     zona = models.ForeignKey(Zona, blank=True, null=True, related_name="propiedades", on_delete=models.SET_NULL)
     habitaciones = models.IntegerField(default=0, help_text="Nº de habitaciones que tiene la propiedad")
     estado = models.CharField(max_length=20, choices=estadoPiso.choices, default='activo')
-    imagenesUrl = models.JSONField(default=list)
+    imagenesUrl = models.JSONField(default=list, blank=True)
     metros = models.IntegerField(default=0)
     animales = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
     balcon = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
@@ -225,4 +225,5 @@ class Cliente(models.Model):
 
     def __str__(self):
         return f"Cliente {self.nombre}"
+
 
