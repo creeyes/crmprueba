@@ -4,12 +4,16 @@ from .views import (
     PublicPropertyList,
     PublicPropertyDetail,
     PublicPropertyFilteredList,
-    PublicLocationsList
+    PublicLocationsList,
+    DecryptSSO
 )
 
 app_name = 'ghl_front'
 
 urlpatterns = [
+    # SSO: Desencriptar payload de GHL para obtener el location_id
+    path('api/decrypt-sso/', DecryptSSO.as_view(), name='decrypt_sso'),
+
     # Listado básico (mantener para compatibilidad)
     path('api/properties/', PublicPropertyList.as_view(), name='public_properties'),
 

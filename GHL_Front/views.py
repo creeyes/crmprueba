@@ -1,3 +1,10 @@
+import json
+import base64
+import hashlib
+import logging
+
+from django.conf import settings
+
 from rest_framework import generics
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
@@ -5,6 +12,101 @@ from rest_framework.response import Response
 from rest_framework import status as http_status
 from ghl_middleware.models import Propiedad
 from .serializers import PropiedadPublicaSerializer
+
+logger = logging.getLogger(__name__)
+
+
+# ========== SSO DECRYPT ENDPOINT ==========
+
+class DecryptSSO(APIView):
+    """
+    Desencripta el payload SSO que GHL envía via postMessage.
+    
+    GHL usa CryptoJS.AES.encrypt(JSON, sharedSecret) que internamente:
+    1. Genera salt aleatorio de 8 bytes
+    2. Deriva key (32 bytes) + iv (16 bytes) usando EVP_BytesToKey con MD5
+    3. Encripta con AES-256-CBC
+    4. Devuelve "Salted__" + salt + ciphertext, todo en Base64
+    
+    Respuesta desencriptada contiene:
+    - activeLocation: el location_id de la agencia actual
+    - userId, companyId, role, userName, email, etc.
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        encrypted_data = request.data.get('encryptedData')
+        
+        if not encrypted_data:
+            return Response(
+                {'error': 'encryptedData es requerido'},
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
+        
+        shared_secret = settings.GHL_APP_SHARED_SECRET
+        if not shared_secret:
+            logger.error("GHL_APP_SHARED_SECRET no está configurado en las variables de entorno")
+            return Response(
+                {'error': 'Configuración del servidor incompleta'},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        try:
+            user_data = self._decrypt_cryptojs_aes(encrypted_data, shared_secret)
+            logger.info(f"SSO desencriptado exitosamente para usuario: {user_data.get('email', 'N/A')}")
+            return Response(user_data)
+            
+        except Exception as e:
+            logger.error(f"Error al desencriptar SSO: {e}")
+            return Response(
+                {'error': 'No se pudo desencriptar el payload SSO'},
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
+
+    @staticmethod
+    def _evp_bytes_to_key(password: bytes, salt: bytes, key_len: int = 32, iv_len: int = 16):
+        """
+        Replica la derivación de clave de OpenSSL EVP_BytesToKey con MD5.
+        Es lo que CryptoJS usa internamente.
+        """
+        d = b''
+        d_list = []
+        while len(b''.join(d_list)) < key_len + iv_len:
+            block = d + password + salt
+            d = hashlib.md5(block).digest()
+            d_list.append(d)
+        derived = b''.join(d_list)
+        return derived[:key_len], derived[key_len:key_len + iv_len]
+
+    @staticmethod
+    def _decrypt_cryptojs_aes(encrypted_b64: str, passphrase: str) -> dict:
+        """
+        Desencripta un string encriptado con CryptoJS.AES.encrypt().
+        """
+        from Crypto.Cipher import AES
+        from Crypto.Util.Padding import unpad
+        
+        # 1. Decodificar Base64
+        raw = base64.b64decode(encrypted_b64)
+        
+        # 2. Verificar prefijo "Salted__" (8 bytes) y extraer salt (8 bytes)
+        if raw[:8] != b'Salted__':
+            raise ValueError("Formato inválido: no tiene prefijo 'Salted__'")
+        
+        salt = raw[8:16]
+        ciphertext = raw[16:]
+        
+        # 3. Derivar key e IV usando EVP_BytesToKey
+        key, iv = DecryptSSO._evp_bytes_to_key(passphrase.encode('utf-8'), salt)
+        
+        # 4. Desencriptar con AES-256-CBC
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+        decrypted = unpad(cipher.decrypt(ciphertext), AES.block_size)
+        
+        # 5. Parsear JSON
+        return json.loads(decrypted.decode('utf-8'))
+
 
 
 # CORRECCIÓN #23: Paginación para evitar devolver todos los datos de golpe

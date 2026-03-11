@@ -189,6 +189,9 @@ GHL_REDIRECT_URI = os.environ.get('GHL_REDIRECT_URI', 'http://localhost:8000/api
 # Secreto para verificar webhooks de GHL (configurable por variable de entorno)
 GHL_WEBHOOK_SECRET = os.environ.get('GHL_WEBHOOK_SECRET', '')
 
+# Shared Secret para desencriptar SSO payload del Marketplace
+GHL_APP_SHARED_SECRET = os.environ.get('GHL_APP_SHARED_SECRET', '')
+
 # Scopes
 GHL_SCOPES = [
     'contacts.readonly',
