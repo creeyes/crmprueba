@@ -89,3 +89,62 @@ def guardadorURL(value):
         if isinstance(value, list):
             lista = [data.get('url') for data in value if isinstance(data, dict) and data.get('url')]
     return lista
+
+
+# --- FUNCIONES INVERSAS (DB → GHL) ---
+
+def format_currency_eur(value):
+    """
+    Formatea un Decimal/float como moneda EUR para GHL.
+    Inverso de clean_currency().
+    Ej: 150000.50 → "€150.000,50"
+    """
+    if not value:
+        return "€0,00"
+    # Formatear con separadores
+    formatted = f"{float(value):,.2f}"
+    # Convertir de formato ingles (1,234.56) a formato EUR (1.234,56)
+    formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"€{formatted}"
+
+
+def preferencias_inversa_1(value):
+    """
+    Inverso de preferenciasTraductor1().
+    Convierte el valor del enum del modelo al formato que espera GHL.
+    'si' → 'Si', 'no' → 'No'
+    """
+    mapa = {"si": "Si", "no": "No"}
+    return mapa.get(value, "No")
+
+
+def preferencias_inversa_2(value):
+    """
+    Inverso de preferenciasTraductor2().
+    'si' → 'Si', 'ind' → 'Indiferente'
+    """
+    mapa = {"si": "Si", "ind": "Indiferente"}
+    return mapa.get(value, "Indiferente")
+
+
+def estado_prop_inversa(value):
+    """
+    Inverso de estadoPropTrad().
+    'activo' → 'a_la_venta', 'vendido' → 'vendido', 'noficial' → 'no_es_oficial'
+    """
+    mapa = {
+        "activo": "a_la_venta",
+        "vendido": "vendido",
+        "noficial": "no_es_oficial",
+    }
+    return mapa.get(value, "no_es_oficial")
+
+
+def imagenes_para_ghl(urls_list):
+    """
+    Inverso de guardadorURL().
+    Convierte lista de URLs a formato GHL: [{"url": "..."}]
+    """
+    if not urls_list:
+        return []
+    return [{"url": url} for url in urls_list if url]

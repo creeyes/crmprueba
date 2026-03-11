@@ -59,9 +59,14 @@ def funcionAsyncronaZonas():
         try:
             opciones_propiedad = []
             opciones_cliente = []
-            for zona in Zona.objects.all():
-                label = zona.nombre
-                value = label.lower().strip().replace(" ", "_")
+            for zona in Zona.objects.select_related('municipio', 'municipio__provincia').all():
+                nombre_zona = zona.nombre
+                nombre_municipio = zona.municipio.nombre
+                nombre_provincia = zona.municipio.provincia.nombre
+
+                label = f"{nombre_zona} -- {nombre_municipio} -- {nombre_provincia}"
+                value = f"{nombre_zona}__{nombre_municipio}__{nombre_provincia}".lower().replace(" ", "_")
+
                 # Los nombres de abajo han de ser así. No estan mal puestos.
                 opciones_propiedad.append({
                     "key": value,
@@ -98,6 +103,34 @@ def funcionAsyncronaZonas():
             logger.error(f"Error actualizando zonas: {str(e)}", exc_info=True)
 
     _executor.submit(actualizacion_zonas_agencias)
+
+
+def sync_to_ghl_background(record_pk, record_type):
+    """
+    Envia un registro local a GHL en background.
+    Usado por Django signals cuando se crea un registro via ORM sin ghl_contact_id.
+
+    record_type: 'cliente' o 'propiedad'
+    """
+    def _worker():
+        from .models import Cliente, Propiedad
+        from .utils import sync_record_to_ghl
+
+        try:
+            if record_type == 'cliente':
+                record = Cliente.objects.get(pk=record_pk)
+            else:
+                record = Propiedad.objects.get(pk=record_pk)
+
+            sync_record_to_ghl(record, record_type)
+
+        except (Cliente.DoesNotExist, Propiedad.DoesNotExist):
+            logger.error(f"Registro {record_type} PK={record_pk} no encontrado para sync")
+        except Exception as e:
+            logger.error(f"Error en sync background {record_type} PK={record_pk}: {str(e)}", exc_info=True)
+
+    future = _executor.submit(_worker)
+    future.add_done_callback(lambda f: f.result() if not f.exception() else logger.error(f"Sync task failed: {f.exception()}"))
 
 
 def shutdown_executor():
