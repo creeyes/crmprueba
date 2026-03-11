@@ -200,7 +200,7 @@ class WebhookPropiedadView(APIView):
                     'ghl_contact_id': ghl_record_id,
                     'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
                     'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
-                    'estado': estado_final,
+                    'estado': estado_base,
                     'animales': preferenciasTraductor1(custom_data.get('animales')),
                     'metros': clean_int(custom_data.get('metros')),
                     'balcon': preferenciasTraductor1(custom_data.get('balcon')),
@@ -533,6 +533,7 @@ class UniversalDeleteView(APIView):
         except Exception as e:
             logger.error(f"Error en UniversalDeleteView: {str(e)}", exc_info=True)
             return Response({"error": "Error interno"}, status=500)
+
 
 
 
