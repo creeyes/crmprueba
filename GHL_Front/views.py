@@ -129,8 +129,8 @@ class PublicPropertyList(generics.ListAPIView):
 
         if agency_id:
             # Filtramos propiedades de esa agencia que estén activas
-            # CORRECCIÓN #22: select_related para evitar N+1 queries
-            return Propiedad.objects.select_related('zona__municipio').filter(
+            # CORRECCIÓN #22: prefetch_related para evitar N+1 queries
+            return Propiedad.objects.prefetch_related('zonas__municipio').filter(
                 agencia__location_id=agency_id, 
                 estado='activo'
             )
@@ -152,8 +152,8 @@ class PublicPropertyDetail(generics.RetrieveAPIView):
         # CORRECCIÓN #21: Filtrar por agency_id para que una agencia no vea propiedades de otra
         agency_id = self.request.query_params.get('agency_id')
 
-        # CORRECCIÓN #22: select_related para evitar N+1 queries
-        queryset = Propiedad.objects.select_related('zona__municipio').filter(estado='activo')
+        # CORRECCIÓN #22: prefetch_related para evitar N+1 queries
+        queryset = Propiedad.objects.prefetch_related('zonas__municipio').filter(estado='activo')
 
         if agency_id:
             queryset = queryset.filter(agencia__location_id=agency_id)
@@ -190,7 +190,7 @@ class PublicPropertyFilteredList(generics.ListAPIView):
             return Propiedad.objects.none()
 
         # Base queryset
-        queryset = Propiedad.objects.select_related('zona__municipio').filter(
+        queryset = Propiedad.objects.prefetch_related('zonas__municipio').filter(
             agencia__location_id=agency_id,
             estado='activo'
         )
@@ -207,7 +207,7 @@ class PublicPropertyFilteredList(generics.ListAPIView):
         # Filtro por ubicación (zona)
         location = self.request.query_params.get('location')
         if location:
-            queryset = queryset.filter(zona__nombre__iexact=location)
+            queryset = queryset.filter(zonas__nombre__iexact=location)
 
         # Filtros por precio
         min_price = self.request.query_params.get('min_price')
@@ -275,19 +275,19 @@ class PublicLocationsList(APIView):
         zonas = Propiedad.objects.filter(
             agencia__location_id=agency_id,
             estado='activo',
-            zona__isnull=False
-        ).select_related('zona__municipio__provincia').values(
-            'zona__nombre',
-            'zona__municipio__nombre',
-            'zona__municipio__provincia__nombre'
+            zonas__isnull=False
+        ).values(
+            'zonas__nombre',
+            'zonas__municipio__nombre',
+            'zonas__municipio__provincia__nombre'
         ).distinct()
 
         # Formatear respuesta
         locations = [
             {
-                'zona': z['zona__nombre'],
-                'municipio': z['zona__municipio__nombre'],
-                'provincia': z['zona__municipio__provincia__nombre']
+                'zona': z['zonas__nombre'],
+                'municipio': z['zonas__municipio__nombre'],
+                'provincia': z['zonas__municipio__provincia__nombre']
             }
             for z in zonas
         ]

@@ -30,16 +30,21 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
         ]
 
     def get_title(self, obj):
-        zona = obj.zona.nombre if obj.zona else "Zona Exclusiva"
+        zonas_list = list(obj.zonas.all())
+        primera_zona = zonas_list[0] if zonas_list else None
+        
+        zona = primera_zona.nombre if primera_zona else "Zona Exclusiva"
         municipio = ""
-        if obj.zona and obj.zona.municipio:
-            municipio = obj.zona.municipio.nombre   
+        if primera_zona and primera_zona.municipio:
+            municipio = primera_zona.municipio.nombre   
         if municipio:
             return f"Oportunidad en {zona}, {municipio}"
         return f"Oportunidad en {zona}"
 
     def get_location(self, obj):
-        if obj.zona: return obj.zona.nombre
+        zonas_list = list(obj.zonas.all())
+        primera_zona = zonas_list[0] if zonas_list else None
+        if primera_zona: return primera_zona.nombre
         return "Consultar Ubicación"
 
     def get_image(self, obj):
