@@ -124,7 +124,7 @@ class Propiedad(models.Model):
     )
 
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    zona = models.ForeignKey(Zona, blank=True, null=True, related_name="propiedades", on_delete=models.SET_NULL)
+    zonas = models.ManyToManyField(Zona, blank=True, related_name="propiedades")
     habitaciones = models.IntegerField(default=0, help_text="Nº de habitaciones que tiene la propiedad")
     estado = models.CharField(max_length=20, choices=estadoPiso.choices, default='activo')
     imagenesUrl = models.JSONField(default=list, blank=True)
@@ -150,11 +150,10 @@ class Propiedad(models.Model):
         ]
         indexes = [
             models.Index(fields=['agencia', 'estado', 'precio'], name='prop_agencia_estado_precio_idx'),
-            models.Index(fields=['agencia', 'zona'], name='prop_agencia_zona_idx'),
         ]
 
     def __str__(self):
-        return f"Propiedad {self.ghl_contact_id} - {self.zona} ({self.habitaciones} habs)"
+        return f"Propiedad {self.ghl_contact_id} ({self.habitaciones} habs)"
 
 
 class Cliente(models.Model):

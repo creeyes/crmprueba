@@ -583,10 +583,7 @@ def actualizarAgenciaIndividualZona(agencia, location_id):
         value = f"{nombre_zona}__{nombre_municipio}__{nombre_provincia}".lower().replace(" ", "_")
 
         # Los nombres de abajo han de ser así. No estan mal puestos.
-        opciones_propiedad.append({
-            "key": value,
-            "label": label
-        })
+        opciones_propiedad.append(label)
         opciones_cliente.append(label)
     if not agencia.ghl_custom_field_propiedad_zona or not agencia.ghl_custom_field_cliente_zona:
         logger.warning(f"Agencia {location_id} no tiene custom field IDs de zona configurados. Saltando.")
@@ -774,11 +771,11 @@ def ghl_create_property_record(access_token, location_id, property_object_id, pr
         "Accept": "application/json"
     }
 
-    # Zona: nombre a formato underscore (inverso de webhook parsing)
-    zona_value = ""
-    if propiedad.zona:
-        z = propiedad.zona
-        zona_value = f"{z.nombre}__{z.municipio.nombre}__{z.municipio.provincia.nombre}".lower().replace(" ", "_")
+    # Zona: formato lista (Array) alineado con clientes
+    zona_value = []
+    for z in propiedad.zonas.select_related('municipio', 'municipio__provincia').all():
+        label = f"{z.nombre} -- {z.municipio.nombre} -- {z.municipio.provincia.nombre}"
+        zona_value.append(label)
 
     properties = {
         "precio": format_currency_eur(propiedad.precio),

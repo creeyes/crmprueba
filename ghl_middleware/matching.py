@@ -14,7 +14,8 @@ def buscar_clientes_para_propiedad(propiedad, agencia):
     Si la propiedad no tiene zona asignada, no se puede hacer matching por zona.
     """
     # Si la propiedad no tiene zona, no podemos hacer matching geografico
-    if not propiedad.zona:
+    zonas_propias = propiedad.zonas.all()
+    if not zonas_propias.exists():
         logger.debug(f"Propiedad {propiedad.ghl_contact_id} sin zona asignada, no se puede hacer matching.")
         return Cliente.objects.none()
 
@@ -40,7 +41,7 @@ def buscar_clientes_para_propiedad(propiedad, agencia):
     clientes_match = Cliente.objects.filter(
         query,
         agencia=agencia,
-        zona_interes=propiedad.zona,
+        zona_interes__in=zonas_propias,
         presupuesto_maximo__gte=propiedad.precio,
         habitaciones_minimas__lte=propiedad.habitaciones,
         metrosMinimo__lte=propiedad.metros

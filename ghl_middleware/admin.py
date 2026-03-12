@@ -11,7 +11,7 @@ class AgenciaAdmin(admin.ModelAdmin):
 
 @admin.register(Propiedad)
 class PropiedadAdmin(admin.ModelAdmin):
-    list_display = ('ghl_contact_id', 'zona', 'precio', 'habitaciones', 'estado', 'agencia')
+    list_display = ('ghl_contact_id', 'precio', 'habitaciones', 'estado', 'agencia')
     list_filter = ('estado', 'agencia')
     search_fields = ('ghl_contact_id',)
 

@@ -215,14 +215,19 @@ class WebhookPropiedadView(APIView):
                     defaults=prop_data
                 )
 
-                zona = custom_data.get("zona")
-                if zona:
-                    zona_nombre_bruto = zona.split("__")[0]
-                    zona_limpio = zona_nombre_bruto.replace("_", " ").lower().strip()
-                    zona_obj = Zona.objects.filter(nombre__iexact=zona_limpio).first()
-                    if zona_obj:
-                        propiedad.zona = zona_obj
-                        propiedad.save()
+                zona_nombre = custom_data.get("zona")
+                if zona_nombre:
+                    if isinstance(zona_nombre, list):
+                        zona_bruta = [str(z).strip() for z in zona_nombre]
+                    else:
+                        zona_bruta = [z.strip() for z in str(zona_nombre).split(",")]
+                    
+                    if zona_bruta:
+                        z_nombres = [z.split("--")[0].strip() for z in zona_bruta if z.split("--")[0].strip()]
+                        if z_nombres:
+                            zonas_objs = Zona.objects.filter(nombre__in=z_nombres)
+                            if zonas_objs.exists():
+                                propiedad.zonas.set(zonas_objs)
 
                 if propiedad.estado == Propiedad.estadoPiso.ACTIVO:
                     clientes_match = buscar_clientes_para_propiedad(propiedad, agencia)
