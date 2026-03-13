@@ -87,7 +87,7 @@ def buscar_propiedades_para_cliente(cliente, agencia):
     # Solo filtrar por zona si el cliente tiene zonas de interes
     zonas_interes = cliente.zona_interes.all()
     if zonas_interes.exists():
-        base_filter['zona__in'] = zonas_interes
+        base_filter['zonas__in'] = zonas_interes
 
     propiedades_match = Propiedad.objects.filter(
         query,
