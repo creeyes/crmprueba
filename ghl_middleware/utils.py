@@ -801,6 +801,81 @@ def ghl_create_property_record(access_token, location_id, property_object_id, pr
 
         if response.status_code in [200, 201]:
             record_id = response.json().get('record', {}).get('id')
+            logger.info(f"Registro Propiedad creado en GHL: {record_id} para Propiedad local PK={propiedad.pk}")
+            return record_id
+        else:
+            logger.error(f"Error creando registro propiedad en GHL: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Excepcion creando registro propiedad en GHL: {str(e)}", exc_info=True)
+        return None
+
+def ghl_create_placeholder_property(access_token, location_id, property_object_id):
+    """
+    Crea una propiedad placeholder en GHL y retorna su Record ID.
+    Requerido antes de guardar en la BD local cuando es una propiedad nueva.
+    """
+    rate_limit_wait()
+
+    url = f"https://services.leadconnectorhq.com/objects/{property_object_id}/records/"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Version": "2021-07-28",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    payload = {
+        "locationId": location_id,
+        "properties": {
+            "name": "Placeholder"
+        }
+    }
+
+    try:
+        response = _http_session.post(url, headers=headers, json=payload, timeout=10)
+        rate_limit_wait(response, default_wait=0)
+
+        if response.status_code in [200, 201]:
+            record_id = response.json().get('record', {}).get('id')
+            logger.info(f"Propiedad Placeholder creada en GHL con Record ID: {record_id}")
+            return record_id
+        else:
+            logger.error(f"Error creando Placeholder en GHL: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Excepcion creando Placeholder en GHL: {str(e)}", exc_info=True)
+        return None
+
+def ghl_delete_property_record(access_token, property_object_id, record_id):
+    """
+    Borra un registro de propiedad en GHL API.
+    """
+    rate_limit_wait()
+
+    url = f"https://services.leadconnectorhq.com/objects/{property_object_id}/records/{record_id}/"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Version": "2021-07-28",
+        "Accept": "application/json"
+    }
+
+    try:
+        response = _http_session.delete(url, headers=headers, timeout=10)
+        rate_limit_wait(response, default_wait=0)
+        
+        if response.status_code in [200, 204]:
+            logger.info(f"Propiedad {record_id} borrada en GHL")
+            return True
+        else:
+            logger.error(f"Error borrando Propiedad {record_id} en GHL: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Excepcion borrando Propiedad {record_id} en GHL: {str(e)}", exc_info=True)
+        return False
+
+        if response.status_code in [200, 201]:
+            record_id = response.json().get('record', {}).get('id')
             logger.info(f"Propiedad creada en GHL: {record_id} para Propiedad local PK={propiedad.pk}")
             return record_id
         else:
