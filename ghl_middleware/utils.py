@@ -828,7 +828,7 @@ def ghl_create_placeholder_property(access_token, location_id, property_object_i
     payload = {
         "locationId": location_id,
         "properties": {
-            "name": "Placeholder"
+            "id": "Placeholder"
         }
     }
 
