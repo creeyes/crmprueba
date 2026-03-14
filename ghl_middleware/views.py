@@ -201,7 +201,7 @@ class WebhookPropiedadView(APIView):
                     return Response({'error': 'Error creando la propiedad placeholder en GHL'}, status=500)
                 
                 # Registramos el ID recien creado para evitar bounce-back inmediatos si GHL manda webhook (poco probable aqui, pero por seguridad)
-                _recent_syncs.add(ghl_record_id)
+                #_recent_syncs.add(ghl_record_id)
             else:
                 # Si viene un id_django, usamos eso para identificar de quien se trata (para validaciones o updates si hiciese falta)
                 pass
