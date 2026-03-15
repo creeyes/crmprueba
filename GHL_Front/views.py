@@ -19,6 +19,7 @@ from ghl_middleware.helpers import (
     clean_currency, clean_int, preferenciasTraductor1, 
     estadoPropTrad, guardadorURL
 )
+from .serializers import PropiedadPublicaSerializer
 
 logger = logging.getLogger(__name__)
 
