@@ -24,7 +24,7 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
     balcon = serializers.CharField(source='get_balcon_display', read_only=True)
     garaje = serializers.CharField(source='get_garaje_display', read_only=True)
     patioInterior = serializers.CharField(source='get_patioInterior_display', read_only=True)
-    estadoStr = serializers.CharField(source='get_estado_display', read_only=True)
+    estado = serializers.CharField(source='get_estado_display', read_only=True)
 
     class Meta:
         model = Propiedad
