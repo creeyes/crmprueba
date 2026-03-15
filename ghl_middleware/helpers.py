@@ -68,12 +68,15 @@ def preferenciasTraductor2(value):
 
 def estadoPropTrad(value):
     """
-    Traduce el estado de la propiedad desde GHL al enum del modelo.
+    Traduce el estado de la propiedad desde GHL o desde Frontend React al enum del modelo.
     """
     mapa = {
         "vendido": Propiedad.estadoPiso.VENDIDO,
         "a la venta": Propiedad.estadoPiso.ACTIVO,
-        "no es oficial": Propiedad.estadoPiso.NoOficial
+        "no es oficial": Propiedad.estadoPiso.NoOficial,
+        "activo": Propiedad.estadoPiso.ACTIVO,
+        "inactivo": Propiedad.estadoPiso.NoOficial,
+        "alquilado": Propiedad.estadoPiso.NoOficial, # mapeos de fallback para react
     }
     value = str(value or "").replace("_", " ").lower()
     return mapa.get(value, Propiedad.estadoPiso.NoOficial)

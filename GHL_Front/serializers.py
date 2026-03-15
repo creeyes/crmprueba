@@ -20,13 +20,20 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
     features = serializers.SerializerMethodField()
     isFeatured = serializers.SerializerMethodField()
 
+    animales = serializers.CharField(source='get_animales_display', read_only=True)
+    balcon = serializers.CharField(source='get_balcon_display', read_only=True)
+    garaje = serializers.CharField(source='get_garaje_display', read_only=True)
+    patioInterior = serializers.CharField(source='get_patioInterior_display', read_only=True)
+    estadoStr = serializers.CharField(source='get_estado_display', read_only=True)
+
     class Meta:
         model = Propiedad
         fields = [
             'id', 'title', 'price', 'location', 
-            'beds', 'sqm', 'type',  # CORRECCIÓN #20: Eliminado 'baths'
+            'beds', 'sqm', 'type',
             'image', 'images', 'features', 'isFeatured',
-            'description' 
+            'description', 'animales', 'balcon', 'garaje', 'patioInterior', 
+            'estado'
         ]
 
     def get_title(self, obj):
