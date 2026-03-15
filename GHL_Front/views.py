@@ -141,8 +141,7 @@ class PublicPropertyList(generics.ListAPIView):
             # Filtramos propiedades de esa agencia que estén activas
             # CORRECCIÓN #22: prefetch_related para evitar N+1 queries
             return Propiedad.objects.prefetch_related('zonas__municipio').filter(
-                agencia__location_id=agency_id, 
-                estado='activo'
+                agencia__location_id=agency_id
             )
         
         # Si no pasan ID, devolvemos vacío para no mezclar datos
@@ -227,7 +226,7 @@ class PublicPropertyDetail(generics.RetrieveUpdateAPIView):
         agency_id = self.request.query_params.get('agency_id')
 
         # CORRECCIÓN #22: prefetch_related para evitar N+1 queries
-        queryset = Propiedad.objects.prefetch_related('zonas__municipio').filter(estado='activo')
+        queryset = Propiedad.objects.prefetch_related('zonas__municipio').all()
 
         if agency_id:
             queryset = queryset.filter(agencia__location_id=agency_id)
@@ -324,8 +323,7 @@ class PublicPropertyFilteredList(generics.ListAPIView):
 
         # Base queryset
         queryset = Propiedad.objects.prefetch_related('zonas__municipio').filter(
-            agencia__location_id=agency_id,
-            estado='activo'
+            agencia__location_id=agency_id
         )
 
         # Filtro por tipo de propiedad
