@@ -1,5 +1,7 @@
+import json
+import base64
+import hashlib
 import logging
-
 from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
