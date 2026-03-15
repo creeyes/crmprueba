@@ -874,16 +874,38 @@ def ghl_delete_property_record(access_token, property_object_id, record_id):
         logger.error(f"Excepcion borrando Propiedad {record_id} en GHL: {str(e)}", exc_info=True)
         return False
 
-        if response.status_code in [200, 201]:
-            record_id = response.json().get('record', {}).get('id')
-            logger.info(f"Propiedad creada en GHL: {record_id} para Propiedad local PK={propiedad.pk}")
-            return record_id
+
+def ghl_update_property_record(access_token, location_id, property_object_id, record_id, data):
+    """
+    Actualiza un registro de propiedad en GHL API.
+    """
+    rate_limit_wait()
+
+    url = f"https://services.leadconnectorhq.com/objects/{property_object_id}/records/{record_id}/"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Version": "2021-07-28",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    payload = {
+        "locationId": location_id,
+        "properties": data
+    }
+
+    try:
+        response = _http_session.put(url, headers=headers, json=payload, timeout=10)
+        rate_limit_wait(response, default_wait=0)
+        
+        if response.status_code in [200, 204]:
+            logger.info(f"Propiedad {record_id} actualizada en GHL")
+            return True
         else:
-            logger.error(f"Error creando propiedad en GHL: {response.status_code} - {response.text}")
-            return None
+            logger.error(f"Error actualizando Propiedad {record_id} en GHL: {response.status_code} - {response.text}")
+            return False
     except Exception as e:
-        logger.error(f"Excepcion creando propiedad en GHL: {str(e)}", exc_info=True)
-        return None
+        logger.error(f"Excepcion actualizando Propiedad {record_id} en GHL: {str(e)}", exc_info=True)
+        return False
 
 
 def sync_record_to_ghl(record, record_type):
