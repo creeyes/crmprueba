@@ -404,23 +404,19 @@ class PublicLocationsList(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        # Obtener zonas únicas de propiedades activas de la agencia
-        zonas = Propiedad.objects.filter(
-            agencia__location_id=agency_id,
-            estado='activo',
-            zonas__isnull=False
-        ).values(
-            'zonas__nombre',
-            'zonas__municipio__nombre',
-            'zonas__municipio__provincia__nombre'
-        ).distinct()
+        # Obtener TODAS las zonas registradas en la base de datos (GHL)
+        zonas = Zona.objects.all().select_related('municipio', 'municipio__provincia').values(
+            'nombre',
+            'municipio__nombre',
+            'municipio__provincia__nombre'
+        ).order_by('nombre')
 
         # Formatear respuesta
         locations = [
             {
-                'zona': z['zonas__nombre'],
-                'municipio': z['zonas__municipio__nombre'],
-                'provincia': z['zonas__municipio__provincia__nombre']
+                'zona': z['nombre'],
+                'municipio': z['municipio__nombre'],
+                'provincia': z['municipio__provincia__nombre']
             }
             for z in zonas
         ]

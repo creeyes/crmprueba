@@ -42,5 +42,20 @@ Se han añadido funciones de comunicación de bajo nivel con la API de GHL:
 
 ---
 
+## 🛠️ Correcciones Adicionales (Bugfixes)
+
+Tras la implementación inicial, se resolvieron dos incidencias que impedían el correcto funcionamiento:
+
+1. **Importación Faltante en Backend (`NameError`)**:
+    - **Archivo:** `GHL_Front/views.py`
+    - **Problema:** Un error borró accidentalmente importes necesarios (`json`, `base64`, `hashlib` y el propio `PropiedadPublicaSerializer`).
+    - **Solución:** Restauradas las dependencias al principio del fichero.
+2. **Error de Tipado en Precios (`TypeError`)**:
+    - **Archivos:** `helpers.py` (Backend) y `App.tsx` (Frontend React)
+    - **Problema:** La función `clean_currency()` del backend asume por fuerza que recibe un string, empezando con moneda (`€150`). React estaba enviando un número puro (ej. `150`), provocando el error `int object is not subscriptable` en backend.
+    - **Solución:** Se ajustó el payload de la función `handleSaveProperty` en el frontend, añadiendo condicionales para envolver el precio (`editForm.price`) como string e insertando una `€` al principio de forma automática antes de hacer la petición `POST`/`PUT`.
+
+---
+
 > [!IMPORTANT]
-> Los cambios se han aplicado localmente en `/Users/c.reeyes/Documents/GitHub/crmprueba-main`. Para subirlos a GitHub, es necesario inicializar el repositorio git en dicha carpeta y subir la rama `v3`.
+> Los cambios se han aplicado localmente. Se debe ejecutar un *commit* y *push* desde el panel o CLI de control de versiones para verlos reflejados online en la rama v3.
