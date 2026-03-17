@@ -771,28 +771,11 @@ def ghl_create_property_record(access_token, location_id, property_object_id, pr
         "Accept": "application/json"
     }
 
-    # Zona: formato lista (Array) alineado con clientes
-    zona_value = []
-    for z in propiedad.zonas.select_related('municipio', 'municipio__provincia').all():
-        label = f"{z.nombre} -- {z.municipio.nombre} -- {z.municipio.provincia.nombre}"
-        zona_value.append(label)
-
-    properties = {
-        "precio": format_currency_eur(propiedad.precio),
-        "habitaciones": str(propiedad.habitaciones),
-        "estado": estado_prop_inversa(propiedad.estado),
-        "animales": preferencias_inversa_1(propiedad.animales),
-        "metros": str(propiedad.metros),
-        "balcon": preferencias_inversa_1(propiedad.balcon),
-        "garaje": preferencias_inversa_1(propiedad.garaje),
-        "patioInterior": preferencias_inversa_1(propiedad.patioInterior),
-        "zona": zona_value,
-        "imagenesUrl": imagenes_para_ghl(propiedad.imagenesUrl),
-    }
-
     payload = {
         "locationId": location_id,
-        "properties": properties,
+        "properties": {
+            "id": "Placeholder"
+        }
     }
 
     try:
