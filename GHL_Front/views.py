@@ -14,7 +14,7 @@ from rest_framework import status as http_status
 
 from ghl_middleware.models import Agencia, Propiedad, Zona
 from ghl_middleware.utils import (
-    get_valid_token, ghl_create_placeholder_property, 
+    get_valid_token,
     ghl_update_property_record, _recent_syncs
 )
 from ghl_middleware.helpers import (
