@@ -167,13 +167,7 @@ class PublicPropertyList(generics.ListAPIView):
         if not access_token:
              return Response({'error': 'No se pudo obtener el token de acceso de GHL'}, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
              
-        # Crear placeholder en GHL
-        ghl_record_id = ghl_create_placeholder_property(access_token, agency_id, agencia.property_object_id)
-        if not ghl_record_id:
-             return Response({'error': 'Fallo al crear el registro en GHL'}, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Registrar el ID para evitar el bounce-back del webhook
-        _recent_syncs.add(ghl_record_id)
+        ghl_record_id = data.get('ghl_record_id')
 
         try:
             with transaction.atomic():
@@ -182,7 +176,7 @@ class PublicPropertyList(generics.ListAPIView):
                 
                 prop_data = {
                     'agencia': agencia,
-                    'ghl_contact_id': ghl_record_id,
+                    'ghl_contact_id': ghl_record_id if ghl_record_id else None,
                     'precio': clean_currency(data.get('precio')),
                     'habitaciones': clean_int(data.get('habitaciones')),
                     'estado': estado_base,
@@ -199,10 +193,17 @@ class PublicPropertyList(generics.ListAPIView):
                 # Asignar zona si viene en el request
                 zona_nombre = data.get("location")
                 if zona_nombre:
-                    zona_objs = Zona.objects.filter(nombre__iexact=zona_nombre)
-                    if zona_objs.exists():
-                        propiedad.zonas.set(zona_objs)
-                
+                    if isinstance(zona_nombre, list):
+                        zona_bruta = [str(z).strip() for z in zona_nombre]
+                    else:
+                        zona_bruta = [z.strip() for z in str(zona_nombre).split(",")]
+                    
+                    if zona_bruta:
+                        z_nombres = [z.split("--")[0].strip() for z in zona_bruta if z.split("--")[0].strip()]
+                        if z_nombres:
+                            zonas_objs = Zona.objects.filter(nombre__in=z_nombres)
+                            if zonas_objs.exists():
+                                propiedad.zonas.set(zonas_objs)
                 # Retornar la propiedad creada usando el serializer público
                 serializer = self.get_serializer(propiedad)
                 return Response(serializer.data, status=http_status.HTTP_201_CREATED)
