@@ -36,6 +36,7 @@ if _allowed:
 elif DEBUG:
     ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 else:
+    # En el futuro, hay que cambiar esto para la url en específico
     ALLOWED_HOSTS = ['.railway.app', '.up.railway.app']
 
 
