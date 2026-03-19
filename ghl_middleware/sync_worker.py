@@ -97,7 +97,7 @@ def _run_sync_cycle():
 
     propiedades_ok = 0
     if propiedad_ids_to_process:
-        propiedades = Propiedad.objects.filter(pk__in=propiedad_ids_to_process).select_related('agencia', 'zona')
+        propiedades = Propiedad.objects.filter(pk__in=propiedad_ids_to_process).select_related('agencia')
         for propiedad in propiedades:
             if sync_record_to_ghl(propiedad, 'propiedad'):
                 propiedades_ok += 1
