@@ -258,7 +258,7 @@ class PublicPropertyDetail(generics.RetrieveUpdateAPIView):
                  "balcon": data.get('balcon', instance.balcon),
                  "garaje": data.get('garaje', instance.garaje),
                  "patioInterior": data.get('patioInterior', instance.patioInterior),
-                 "zona": data.get('location', instance.zonas.first().nombre if instance.zonas.exists() else "")
+                 "zonas": data.get('location', instance.zonas.first().nombre if instance.zonas.exists() else "")
              }
              
              ghl_update_property_record(
