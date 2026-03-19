@@ -15,7 +15,7 @@ from .models import Agencia, Propiedad, Cliente, GHLToken, Provincia, Municipio,
 from .tasks import sync_associations_background, funcionAsyncronaZonas
 from .utils import (
     get_valid_token, get_association_type_id, initialize_ghl_setup, 
-    get_location_name, _recent_syncs, ghl_create_placeholder_property, 
+    get_location_name, _recent_syncs, 
     ghl_delete_property_record
 )
 from .helpers import (
@@ -186,34 +186,6 @@ class WebhookPropiedadView(APIView):
             ghl_record_id = custom_data.get('contact_id') or data.get('id')
             id_django = custom_data.get('id_django') or data.get('id_django')
 
-            if not id_django:
-                # Si no hay ID de Django, significa que es una propiedad nueva.
-                # Creamos el placeholder en GHL primero.
-                if not agencia.property_object_id:
-                    return Response({'error': 'Falta el id del objeto propiedad (property_object_id) en la agencia'}, status=400)
-                
-                access_token = get_valid_token(location_id)
-                if not access_token:
-                    return Response({'error': 'No se pudo obtener token valido para crear la propiedad en GHL'}, status=500)
-
-                ghl_record_id = ghl_create_placeholder_property(access_token, location_id, agencia.property_object_id)
-                if not ghl_record_id:
-                    return Response({'error': 'Error creando la propiedad placeholder en GHL'}, status=500)
-                
-                # Registramos el ID recien creado para evitar bounce-back inmediatos si GHL manda webhook (poco probable aqui, pero por seguridad)
-                #_recent_syncs.add(ghl_record_id)
-            else:
-                # Si viene un id_django, usamos eso para identificar de quien se trata (para validaciones o updates si hiciese falta)
-                pass
-
-            if not ghl_record_id:
-                return Response({'error': 'Missing Record ID'}, status=400)
-
-            # Bounce-back prevention: si nosotros creamos este registro, ignorar webhook
-            if _recent_syncs.check_and_remove(ghl_record_id):
-                logger.info(f"Bounce-back webhook detectado para Propiedad {ghl_record_id}. Ignorando.")
-                return Response({'status': 'bounce_back'})
-
             with transaction.atomic():
                 # Determinar visibilidad en web según checkbox de portales
                 estado_base = estadoPropTrad(custom_data.get("estado"))
@@ -222,7 +194,7 @@ class WebhookPropiedadView(APIView):
 
                 prop_data = {
                     'agencia': agencia,
-                    'ghl_contact_id': ghl_record_id,
+                    'ghl_contact_id': ghl_record_id if ghl_record_id else None,
                     'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
                     'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
                     'estado': estado_base,
@@ -243,7 +215,7 @@ class WebhookPropiedadView(APIView):
                 else:
                     propiedad, created = Propiedad.objects.update_or_create(
                         agencia=agencia,
-                        ghl_contact_id=ghl_record_id,
+                        ghl_contact_id=ghl_record_id if ghl_record_id else None,
                         defaults=prop_data
                     )
 
