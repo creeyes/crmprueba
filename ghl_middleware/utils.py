@@ -1,4 +1,4 @@
-import requests
+import requestsselect_related
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import logging
@@ -824,6 +824,8 @@ def ghl_delete_property_record(access_token, property_object_id, record_id):
 def ghl_update_property_record(access_token, location_id, property_object_id, record_id, data):
     """
     Actualiza un registro de propiedad en GHL API.
+    locationId va como query parameter (no en el body).
+    El body solo contiene: {"properties": { ... }}
     """
     rate_limit_wait()
 
@@ -834,13 +836,15 @@ def ghl_update_property_record(access_token, location_id, property_object_id, re
         "Content-Type": "application/json",
         "Accept": "application/json"
     }
-    payload = {
+    params = {
         "locationId": location_id,
+    }
+    payload = {
         "properties": data
     }
 
     try:
-        response = _http_session.put(url, headers=headers, json=payload, timeout=10)
+        response = _http_session.put(url, headers=headers, params=params, json=payload, timeout=10)
         rate_limit_wait(response, default_wait=0)
         
         if response.status_code in [200, 204]:
@@ -854,15 +858,16 @@ def ghl_update_property_record(access_token, location_id, property_object_id, re
         return False
 
 
-def sync_record_to_ghl(record, record_type):
+def sync_record_to_ghl(record, record_type, created=True):
     """
     Sincroniza un registro local (Cliente o Propiedad) con GHL.
-    1. Obtiene token valido
-    2. Marca como 'syncing'
-    3. Crea en GHL
-    4. Registra en cache anti-bounce-back
-    5. Guarda ghl_contact_id + sync_status='synced'
-    6. Ejecuta matching y sincroniza asociaciones
+
+    Si created=True (nuevo registro):
+      1. Crea en GHL, guarda ghl_contact_id, ejecuta matching y sincroniza asociaciones.
+
+    Si created=False (actualizacion) y ya tiene ghl_contact_id:
+      1. Actualiza el registro existente en GHL via ghl_update_property_record.
+      2. Re-ejecuta matching y sincroniza asociaciones.
 
     record_type: 'cliente' o 'propiedad'
     Retorna True si fue exitoso, False si fallo.
@@ -889,40 +894,64 @@ def sync_record_to_ghl(record, record_type):
     record.save(update_fields=['sync_status'])
 
     try:
-        if record_type == 'cliente':
-            ghl_id = ghl_create_contact(access_token, location_id, record)
+        # --- RAMA UPDATE: el registro ya existe en GHL ---
+        if not created and record.ghl_contact_id:
+            if record_type == 'propiedad':
+                prop_obj_id = record.agencia.property_object_id
+                if not prop_obj_id:
+                    raise Exception("No se pudo obtener property_object_id para el update en GHL")
+                update_ok = ghl_update_property_record(
+                    access_token, location_id, prop_obj_id, record.ghl_contact_id,
+                    {"id": record.ghl_contact_id}  # payload minimo; los datos reales llegan via webhook
+                )
+                if not update_ok:
+                    raise Exception("ghl_update_property_record devolvio False")
+                logger.info(f"Update en GHL exitoso: {record_type} PK={record.pk} -> GHL ID={record.ghl_contact_id}")
+            else:
+                # Para clientes el update llega por webhook; aqui solo marcamos synced
+                logger.info(f"Update de cliente {record_type} PK={record.pk} ignorado (gestionado por webhook)")
+
+            record.sync_status = 'synced'
+            record.sync_error = ''
+            record.save(update_fields=['sync_status', 'sync_error'])
+
+            # Re-ejecutar matching tambien en updates
+            ghl_id = record.ghl_contact_id
+
+        # --- RAMA CREATE: registro nuevo, hay que crearlo en GHL ---
         else:
-            # Necesita property_object_id de la Agencia
-            prop_obj_id = record.agencia.property_object_id
-            if not prop_obj_id:
-                prop_obj_id = get_property_object_id(access_token, location_id)
-                if prop_obj_id:
-                    record.agencia.property_object_id = prop_obj_id
-                    record.agencia.save(update_fields=['property_object_id'])
-                else:
-                    raise Exception("No se pudo obtener property_object_id de GHL")
-            ghl_id = ghl_create_property_record(access_token, location_id, prop_obj_id, record)
+            if record_type == 'cliente':
+                ghl_id = ghl_create_contact(access_token, location_id, record)
+            else:
+                prop_obj_id = record.agencia.property_object_id
+                if not prop_obj_id:
+                    prop_obj_id = get_property_object_id(access_token, location_id)
+                    if prop_obj_id:
+                        record.agencia.property_object_id = prop_obj_id
+                        record.agencia.save(update_fields=['property_object_id'])
+                    else:
+                        raise Exception("No se pudo obtener property_object_id de GHL")
+                ghl_id = ghl_create_property_record(access_token, location_id, prop_obj_id, record)
 
-        if not ghl_id:
-            raise Exception(f"GHL API no retorno ID para {record_type}")
+            if not ghl_id:
+                raise Exception(f"GHL API no retorno ID para {record_type}")
 
-        # Registrar en cache anti-bounce-back ANTES de guardar
-        _recent_syncs.add(ghl_id)
+            # Registrar en cache anti-bounce-back ANTES de guardar
+            _recent_syncs.add(ghl_id)
 
-        # Actualizar registro local con GHL ID
-        record.ghl_contact_id = ghl_id
-        record.sync_status = 'synced'
-        record.sync_error = ''
-        record.save(update_fields=['ghl_contact_id', 'sync_status', 'sync_error'])
+            record.ghl_contact_id = ghl_id
+            record.sync_status = 'synced'
+            record.sync_error = ''
+            record.save(update_fields=['ghl_contact_id', 'sync_status', 'sync_error'])
 
-        # Ejecutar matching (misma logica que los webhook handlers)
+        # --- MATCHING y ASOCIACIONES (igual en create y update) ---
         if record_type == 'propiedad' and record.estado == Propiedad.estadoPiso.ACTIVO:
             clientes_match = buscar_clientes_para_propiedad(record, record.agencia)
             actualizar_relaciones_propiedad(record, clientes_match)
             if record.agencia.association_type_id:
                 target_ids = [c.ghl_contact_id for c in clientes_match if c.ghl_contact_id]
                 sync_associations_background(
-                    access_token, location_id, record.ghl_contact_id,
+                    access_token, location_id, ghl_id,
                     target_ids, record.agencia.association_type_id
                 )
         elif record_type == 'cliente':
@@ -931,12 +960,12 @@ def sync_record_to_ghl(record, record_type):
             if record.agencia.association_type_id:
                 target_ids = [p.ghl_contact_id for p in propiedades_match if p.ghl_contact_id]
                 sync_associations_background(
-                    access_token, location_id, record.ghl_contact_id,
+                    access_token, location_id, ghl_id,
                     target_ids, record.agencia.association_type_id,
                     origin_is_contact=True
                 )
 
-        logger.info(f"Sync exitoso: {record_type} PK={record.pk} -> GHL ID={ghl_id}")
+        logger.info(f"Sync exitoso ({'create' if created else 'update'}): {record_type} PK={record.pk} -> GHL ID={ghl_id}")
         return True
 
     except Exception as e:

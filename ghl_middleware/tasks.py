@@ -105,12 +105,13 @@ def funcionAsyncronaZonas():
     _executor.submit(actualizacion_zonas_agencias)
 
 
-def sync_to_ghl_background(record_pk, record_type):
+def sync_to_ghl_background(record_pk, record_type, created=True):
     """
     Envia un registro local a GHL en background.
-    Usado por Django signals cuando se crea un registro via ORM sin ghl_contact_id.
+    Usado por Django signals cuando se crea o actualiza un registro via ORM sin ghl_contact_id.
 
     record_type: 'cliente' o 'propiedad'
+    created: True si es un registro nuevo, False si es una actualizacion
     """
     def _worker():
         from .models import Cliente, Propiedad
@@ -122,7 +123,7 @@ def sync_to_ghl_background(record_pk, record_type):
             else:
                 record = Propiedad.objects.get(pk=record_pk)
 
-            sync_record_to_ghl(record, record_type)
+            sync_record_to_ghl(record, record_type, created=created)
 
         except (Cliente.DoesNotExist, Propiedad.DoesNotExist):
             logger.error(f"Registro {record_type} PK={record_pk} no encontrado para sync")

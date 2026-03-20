@@ -16,7 +16,7 @@ def sync_cliente_to_ghl(sender, instance, created, **kwargs):
     if not instance.ghl_contact_id and instance.sync_status == 'pending':
         from .tasks import sync_to_ghl_background
         logger.info(f"Signal: Cliente PK={instance.pk} sin ghl_contact_id, lanzando sync background")
-        sync_to_ghl_background(instance.pk, 'cliente')
+        sync_to_ghl_background(instance.pk, 'cliente', created=created)
 
 
 @receiver(post_save, sender=Propiedad)
@@ -29,4 +29,4 @@ def sync_propiedad_to_ghl(sender, instance, created, **kwargs):
     if not instance.ghl_contact_id and instance.sync_status == 'pending':
         from .tasks import sync_to_ghl_background
         logger.info(f"Signal: Propiedad PK={instance.pk} sin ghl_contact_id, lanzando sync background")
-        sync_to_ghl_background(instance.pk, 'propiedad')
+        sync_to_ghl_background(instance.pk, 'propiedad', created=created)
