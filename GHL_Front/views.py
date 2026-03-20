@@ -241,34 +241,7 @@ class PublicPropertyDetail(generics.RetrieveUpdateAPIView):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         data = request.data
-        
-        # Registrar para evitar bounce-back
-        _recent_syncs.add(instance.ghl_contact_id)
-        
-        # 1. Intentar actualizar en GHL
-        access_token = get_valid_token(instance.agencia.location_id)
-        if access_token and instance.agencia.property_object_id:
-             # Mapeo simple de campos para GHL (puedes expandir esto según necesites)
-             ghl_payload = {
-                 "precio": str(data.get('precio', instance.precio)),
-                 "habitaciones": str(data.get('habitaciones', instance.habitaciones)),
-                 "metros": str(data.get('metros', instance.metros)),
-                 "estado": data.get('estado', instance.estado),
-                 "animales": data.get('animales', instance.animales),
-                 "balcon": data.get('balcon', instance.balcon),
-                 "garaje": data.get('garaje', instance.garaje),
-                 "patioInterior": data.get('patioInterior', instance.patioInterior),
-                 "zonas": data.get('location', instance.zonas.first().nombre if instance.zonas.exists() else "")
-             }
-             
-             ghl_update_property_record(
-                 access_token, 
-                 instance.agencia.location_id, 
-                 instance.agencia.property_object_id, 
-                 instance.ghl_contact_id, 
-                 ghl_payload
-             )
-
+                
         # 2. Actualizar localmente
         # Preparamos los datos para el update local
         if 'estado' in data: instance.estado = estadoPropTrad(data['estado'])
