@@ -11,15 +11,15 @@ class AgenciaAdmin(admin.ModelAdmin):
 
 @admin.register(Propiedad)
 class PropiedadAdmin(admin.ModelAdmin):
-    list_display = ('ghl_contact_id', 'precio', 'habitaciones', 'estado', 'agencia')
-    list_filter = ('estado', 'agencia')
+    list_display = ('ghl_contact_id', 'precio', 'habitaciones', 'estado', 'agencia', 'sync_status')
+    list_filter = ('sync_status', 'estado', 'agencia')
     search_fields = ('ghl_contact_id',)
 
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'ghl_contact_id', 'presupuesto_maximo', 'agencia')
-    list_filter = ('agencia',)
+    list_display = ('nombre', 'ghl_contact_id', 'presupuesto_maximo', 'agencia', 'sync_status')
+    list_filter = ('sync_status', 'agencia')
     search_fields = ('nombre', 'ghl_contact_id')
 
 

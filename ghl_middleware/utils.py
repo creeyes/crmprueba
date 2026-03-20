@@ -1,4 +1,4 @@
-import requestsselect_related
+import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import logging

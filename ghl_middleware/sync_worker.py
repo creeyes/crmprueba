@@ -77,7 +77,8 @@ def _run_sync_cycle():
     if cliente_ids_to_process:
         clientes = Cliente.objects.filter(pk__in=cliente_ids_to_process).select_related('agencia')
         for cliente in clientes:
-            if sync_record_to_ghl(cliente, 'cliente'):
+            is_new = not bool(cliente.ghl_contact_id)
+            if sync_record_to_ghl(cliente, 'cliente', created=is_new):
                 clientes_ok += 1
             rate_limit_wait(default_wait=0.3)
 
@@ -99,7 +100,8 @@ def _run_sync_cycle():
     if propiedad_ids_to_process:
         propiedades = Propiedad.objects.filter(pk__in=propiedad_ids_to_process).select_related('agencia')
         for propiedad in propiedades:
-            if sync_record_to_ghl(propiedad, 'propiedad'):
+            is_new = not bool(propiedad.ghl_contact_id)
+            if sync_record_to_ghl(propiedad, 'propiedad', created=is_new):
                 propiedades_ok += 1
             rate_limit_wait(default_wait=0.3)
 
