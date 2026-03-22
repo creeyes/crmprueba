@@ -902,7 +902,7 @@ def sync_record_to_ghl(record, record_type, created=True):
                     raise Exception("No se pudo obtener property_object_id para el update en GHL")
                 update_ok = ghl_update_property_record(
                     access_token, location_id, prop_obj_id, record.ghl_contact_id,
-                    {"id": record.ghl_contact_id}  # payload minimo; los datos reales llegan via webhook
+                    {"id": f"{record.calle or 'Sin calle'} -- {record.zonas.first() or 'Sin zona'} -- {record.precio or 'Sin precio'}"}  # payload minimo; los datos reales llegan via webhook
                 )
                 if not update_ok:
                     raise Exception("ghl_update_property_record devolvio False")
