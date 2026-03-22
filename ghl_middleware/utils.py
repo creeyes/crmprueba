@@ -774,7 +774,7 @@ def ghl_create_property_record(access_token, location_id, property_object_id, pr
     payload = {
         "locationId": location_id,
         "properties": {
-            "id": "Placeholder"
+            "id": f"{propiedad.calle or 'Sin calle'} -- {propiedad.zonas.first() or 'Sin zona'} -- {propiedad.precio or 'Sin precio'}"
         }
     }
 
