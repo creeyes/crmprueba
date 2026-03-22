@@ -133,6 +133,8 @@ class Propiedad(models.Model):
     balcon = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
     garaje = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
     patioInterior = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    descripcion = models.TextField(blank=True, null=True)
+    calle = models.CharField(max_length=255, blank=True, null=True)
 
     sync_status = models.CharField(
         max_length=20, choices=SyncStatus.choices, default=SyncStatus.PENDING,
