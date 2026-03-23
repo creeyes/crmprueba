@@ -555,6 +555,33 @@ def delete_dummy_contact(access_token, contact_id):
     except Exception as e:
         logger.error(f"Excepcion borrando contacto dummy: {str(e)}")
 
+def ghl_delete_contact(access_token, contact_id):
+    """
+    Borra un contacto en GHL API.
+    Retorna True si tiene exito, False si falla.
+    """
+    rate_limit_wait()
+    url = f"https://services.leadconnectorhq.com/contacts/{contact_id}/"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Version": "2021-07-28",
+        "Accept": "application/json"
+    }
+
+    try:
+        response = _http_session.delete(url, headers=headers, timeout=10)
+        rate_limit_wait(response, default_wait=0)
+        
+        if response.status_code in [200, 204]:
+            logger.info(f"Contacto {contact_id} borrado en GHL")
+            return True
+        else:
+            logger.error(f"Error borrando contacto {contact_id} en GHL: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Excepcion borrando contacto {contact_id} en GHL: {str(e)}", exc_info=True)
+        return False
+
 def delete_dummy_property(access_token, property_object_id, record_id):
     """Borra la propiedad dummy."""
     url = f"https://services.leadconnectorhq.com/objects/{property_object_id}/records/{record_id}/"

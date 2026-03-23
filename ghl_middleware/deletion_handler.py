@@ -14,8 +14,8 @@ def process_delete_request(data):
         return _handle_client_delete(data)
     
     # Verificacion estricta para Propiedades: type='RecordDelete' AND objectKey='custom_objects.propiedades'
-    elif record_type == 'RecordDelete' and data.get('objectKey') == 'custom_objects.propiedades':
-        return _handle_property_delete(data)
+    # elif record_type == 'RecordDelete' and data.get('objectKey') == 'custom_objects.propiedades':
+    #     return _handle_property_delete(data)
     
     else:
         logger.warning(f"Solicitud de borrado ignorada. Type: {record_type}, ObjectKey: {data.get('objectKey')}")
@@ -40,21 +40,21 @@ def _handle_client_delete(data):
         logger.error(f"Error borrando Cliente {ghl_id}: {str(e)}", exc_info=True)
         return False
 
-def _handle_property_delete(data):
-    ghl_id = data.get('id')
-    if not ghl_id:
-        logger.error("Intento de borrar Propiedad sin ID")
-        return False
+# def _handle_property_delete(data):
+#     ghl_id = data.get('id')
+#     if not ghl_id:
+#         logger.error("Intento de borrar Propiedad sin ID")
+#         return False
 
-    try:
-        propiedad = Propiedad.objects.filter(ghl_contact_id=ghl_id).first()
-        if propiedad:
-            propiedad.delete()
-            logger.info(f"Propiedad {ghl_id} borrada correctamente (y sus asociaciones).")
-            return True
-        else:
-            logger.info(f"Propiedad {ghl_id} no encontrado en BBDD local. Nada que borrar.")
-            return True
-    except Exception as e:
-        logger.error(f"Error borrando Propiedad {ghl_id}: {str(e)}", exc_info=True)
-        return False
+#     try:
+#         propiedad = Propiedad.objects.filter(ghl_contact_id=ghl_id).first()
+#         if propiedad:
+#             propiedad.delete()
+#             logger.info(f"Propiedad {ghl_id} borrada correctamente (y sus asociaciones).")
+#             return True
+#         else:
+#             logger.info(f"Propiedad {ghl_id} no encontrado en BBDD local. Nada que borrar.")
+#             return True
+#     except Exception as e:
+#         logger.error(f"Error borrando Propiedad {ghl_id}: {str(e)}", exc_info=True)
+#         return False

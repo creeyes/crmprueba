@@ -16,7 +16,7 @@ from .tasks import sync_associations_background, funcionAsyncronaZonas
 from .utils import (
     get_valid_token, get_association_type_id, initialize_ghl_setup, 
     get_location_name, _recent_syncs, 
-    ghl_delete_property_record
+    ghl_delete_property_record, ghl_delete_contact
 )
 from .helpers import (
     clean_currency, clean_int, preferenciasTraductor1,
@@ -537,9 +537,41 @@ class WebhookClienteDeleteView(APIView):
             logger.info(f"Webhook Cliente DELETE recibido: {data}")
             print(f"--- INFO DELETE CLIENTE: {data} ---") # Print explicito para verificacion rapida en consola
 
-            # AQUI IMPLEMENTAREMOS LA LOGICA DE BORRADO MAS ADELANTE
+            custom_data = data.get('customData', {})
+            id_django = custom_data.get('id_django')
 
-            return Response({'status': 'received', 'action': 'delete_client'})
+            if not id_django:
+                logger.info("Webhook Delete recibido sin id_django en customData. Ignorando borrado.")
+                return Response({'status': 'ignored', 'message': 'No id_django provided in customData, skipping deletion'})
+                
+            try:
+                # Buscamos el cliente en nuestra base de datos para obtener su agencia y el location_id
+                cliente = Cliente.objects.get(id=id_django)
+                agencia = cliente.agencia
+                location_id = agencia.location_id
+            except Cliente.DoesNotExist:
+                logger.warning(f"Cliente con id_django={id_django} no encontrado para borrar.")
+                return Response({'status': 'ignored', 'message': 'Cliente no encontrado en local'})
+
+            if not cliente.ghl_contact_id:
+                logger.warning(f"Cliente local con id {id_django} no tiene ghl_contact_id asignado.")
+                # Si no tiene ID de GHL, lo borramos solo localmente si quieres, o damos error.
+                # Siguiendo el patron de propiedad: volvemos error de borrado.
+                return Response({'status': 'deleted_locally', 'message': 'Error en borrado.'})
+
+            access_token = get_valid_token(location_id)
+            if not access_token:
+                return Response({'error': 'No se pudo obtener token valido para borrar el cliente en GHL'}, status=500)
+
+            # Usamos el helper que creamos
+            ghl_deleted = ghl_delete_contact(access_token, cliente.ghl_contact_id)
+            
+            if ghl_deleted:
+                # Si se borro bien de GHL, lo borramos localmente
+                cliente.delete()
+                return Response({'status': 'deleted', 'message': 'Cliente borrado correctamente de GHL y BBDD local'})
+            else:
+                return Response({'error': 'Error intentando borrar el cliente de GHL'}, status=500)
 
         except Exception as e:
             logger.error(f"Error en Webhook Cliente Delete: {str(e)}", exc_info=True)
