@@ -6,7 +6,7 @@ Configured for production on Railway & Go High Level OAuth.
 import os
 from pathlib import Path
 import dj_database_url # Necesario para la Base de Datos de Railway
-
+import cloudinary
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -36,7 +36,6 @@ if _allowed:
 elif DEBUG:
     ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 else:
-    # En el futuro, hay que cambiar esto para la url en específico
     ALLOWED_HOSTS = ['.railway.app', '.up.railway.app']
 
 
@@ -225,11 +224,9 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
 
-
-
-
-
-
-
-
-
+cloudinary.config( 
+  cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME"), 
+  api_key = os.environ.get("CLOUDINARY_API_KEY"), 
+  api_secret = os.environ.get("CLOUDINARY_API_SECRET"),
+  secure = True
+)
