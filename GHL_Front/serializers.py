@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from ghl_middleware.models import Propiedad
+from ghl_middleware.ImgCloudinary import generar_url_firmada
 
 class PropiedadPublicaSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='ghl_contact_id')
@@ -55,16 +56,22 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
         return "Consultar Ubicación"
 
     def get_image(self, obj):
-        # Devuelve la primera imagen o un placeholder si no hay
+        # Devuelve la primera imagen firmada o un placeholder si no hay
         if obj.imagenesUrl and isinstance(obj.imagenesUrl, list) and len(obj.imagenesUrl) > 0:
-            return obj.imagenesUrl[0]
+            first_id = obj.imagenesUrl[0]
+            url = generar_url_firmada(first_id)
+            return url if url else "https://placehold.co/600x400?text=Sin+Imagen"
         return "https://placehold.co/600x400?text=Sin+Imagen"
 
     def get_images(self, obj):
-        # Devuelve siempre una lista, aunque esté vacía, para no romper el front
+        # Devuelve siempre una lista de URLs firmadas
         if not obj.imagenesUrl or not isinstance(obj.imagenesUrl, list):
             return []
-        return obj.imagenesUrl
+        
+        urls = generar_url_firmada(obj.imagenesUrl)
+        if isinstance(urls, str):
+            urls = [urls]
+        return [url for url in urls if url is not None]
 
     def get_type(self, obj):
         if obj.habitaciones > 4: return "Villa"

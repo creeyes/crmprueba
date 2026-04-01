@@ -13,14 +13,6 @@ from rest_framework.response import Response
 from rest_framework import status as http_status
 
 from ghl_middleware.models import Agencia, Propiedad, Zona
-from ghl_middleware.utils import (
-    get_valid_token,
-    ghl_update_property_record, _recent_syncs
-)
-from ghl_middleware.helpers import (
-    clean_currency, clean_int, preferenciasTraductor1, 
-    estadoPropTrad, guardadorURL
-)
 from .serializers import PropiedadPublicaSerializer
 
 logger = logging.getLogger(__name__)
@@ -147,73 +139,8 @@ class PublicPropertyList(generics.ListAPIView):
         # Si no pasan ID, devolvemos vacío para no mezclar datos
         return Propiedad.objects.none()
 
-    def post(self, request):
-        """
-        Crea una nueva propiedad tanto en GHL como en la base de datos local.
-        """
-        data = request.data
-        agency_id = data.get('agencia') or request.query_params.get('agency_id')
-        
-        if not agency_id:
-            return Response({"error": "agency_id es requerido"}, status=http_status.HTTP_400_BAD_REQUEST)
-            
-        agencia = get_object_or_404(Agencia, location_id=agency_id)
-        
-        # 1. Crear en GHL primero
-        if not agencia.property_object_id:
-             return Response({'error': 'La agencia no tiene configurado el Property Object ID'}, status=http_status.HTTP_400_BAD_REQUEST)
-             
-        access_token = get_valid_token(agency_id)
-        if not access_token:
-             return Response({'error': 'No se pudo obtener el token de acceso de GHL'}, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
-             
-        ghl_record_id = data.get('ghl_record_id')
 
-        try:
-            with transaction.atomic():
-                # Limpieza de datos usando helpers
-                estado_base = estadoPropTrad(data.get("estado"))
-                
-                prop_data = {
-                    'agencia': agencia,
-                    'ghl_contact_id': ghl_record_id if ghl_record_id else None,
-                    'precio': clean_currency(data.get('precio')),
-                    'habitaciones': clean_int(data.get('habitaciones')),
-                    'estado': estado_base,
-                    'animales': preferenciasTraductor1(data.get('animales')),
-                    'metros': clean_int(data.get('metros')),
-                    'balcon': preferenciasTraductor1(data.get('balcon')),
-                    'garaje': preferenciasTraductor1(data.get('garaje')),
-                    'patioInterior': preferenciasTraductor1(data.get('patioInterior')),
-                    'imagenesUrl': data.get('imagenesUrl', []),
-                }
-                
-                propiedad = Propiedad.objects.create(**prop_data)
-                
-                # Asignar zona si viene en el request
-                zona_nombre = data.get("location")
-                if zona_nombre:
-                    if isinstance(zona_nombre, list):
-                        zona_bruta = [str(z).strip() for z in zona_nombre]
-                    else:
-                        zona_bruta = [z.strip() for z in str(zona_nombre).split(",")]
-                    
-                    if zona_bruta:
-                        z_nombres = [z.split("--")[0].strip() for z in zona_bruta if z.split("--")[0].strip()]
-                        if z_nombres:
-                            zonas_objs = Zona.objects.filter(nombre__in=z_nombres)
-                            if zonas_objs.exists():
-                                propiedad.zonas.set(zonas_objs)
-                # Retornar la propiedad creada usando el serializer público
-                serializer = self.get_serializer(propiedad)
-                return Response(serializer.data, status=http_status.HTTP_201_CREATED)
-                
-        except Exception as e:
-            logger.error(f"Error en POST /api/properties/: {str(e)}", exc_info=True)
-            return Response({"error": "Error interno al guardar la propiedad"}, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class PublicPropertyDetail(generics.RetrieveUpdateAPIView):
+class PublicPropertyDetail(generics.RetrieveAPIView):
     """
     Vista para obtener el detalle de una sola propiedad usando su GHL Contact ID.
     """
@@ -233,38 +160,6 @@ class PublicPropertyDetail(generics.RetrieveUpdateAPIView):
             queryset = queryset.filter(agencia__location_id=agency_id)
 
         return queryset
-
-    def update(self, request, *args, **kwargs):
-        """
-        Actualiza una propiedad existente tanto en GHL como localmente.
-        """
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        data = request.data
-                
-        # 2. Actualizar localmente
-        # Preparamos los datos para el update local
-        if 'estado' in data: instance.estado = estadoPropTrad(data['estado'])
-        if 'precio' in data: instance.precio = clean_currency(data['precio'])
-        if 'habitaciones' in data: instance.habitaciones = clean_int(data['habitaciones'])
-        if 'metros' in data: instance.metros = clean_int(data['metros'])
-        if 'animales' in data: instance.animales = preferenciasTraductor1(data['animales'])
-        if 'balcon' in data: instance.balcon = preferenciasTraductor1(data['balcon'])
-        if 'garaje' in data: instance.garaje = preferenciasTraductor1(data['garaje'])
-        if 'patioInterior' in data: instance.patioInterior = preferenciasTraductor1(data['patioInterior'])
-        if 'imagenesUrl' in data: instance.imagenesUrl = data['imagenesUrl']
-
-        # Manejo de zonas en el update
-        if 'location' in data:
-            zona_objs = Zona.objects.filter(nombre__iexact=data['location'])
-            if zona_objs.exists():
-                instance.zonas.set(zona_objs)
-
-        instance.save()
-
-        # Retornamos los datos actualizados usando el serializer público
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
 
 
 # ========== NUEVOS ENDPOINTS CON FILTROS AVANZADOS ==========
