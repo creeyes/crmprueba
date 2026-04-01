@@ -94,6 +94,55 @@ def guardadorURL(value):
     return lista
 
 
+def parse_zona_nombres(zona_input):
+    """
+    Parsea las zonas desde string o lista. Limpia el sufijo '--'.
+    Retorna una lista de nombres de zonas limpios.
+    """
+    if not zona_input:
+        return []
+    
+    if isinstance(zona_input, list):
+        zona_bruta = [str(z).strip() for z in zona_input]
+    else:
+        zona_bruta = [z.strip() for z in str(zona_input).split(",")]
+        
+    z_nombres = [z.split("--")[0].strip() for z in zona_bruta if z.split("--")[0].strip()]
+    return z_nombres
+
+
+def parse_property_data(data, custom_data=None):
+    """
+    Unifica el saneamiento de datos de la Propiedad, sirviendo tanto para Webhooks 
+    (que traen 'custom_data') como para peticiones del Frontend (que solo traen 'data').
+    """
+    if custom_data is None:
+        custom_data = {}
+        
+    estado_base = estadoPropTrad(custom_data.get("estado") or data.get("estado"))
+    
+    # Soporta imagenes como lista pura de strings (Frontend) o como diccionarios de GHL (Webhook)
+    imagenes_brutas = custom_data.get('imagenesUrl') or data.get('imagenesUrl')
+    if isinstance(imagenes_brutas, list) and len(imagenes_brutas) > 0 and isinstance(imagenes_brutas[0], str):
+        imagenes_limpias = imagenes_brutas
+    else:
+        imagenes_limpias = guardadorURL(imagenes_brutas)
+
+    parsed_data = {
+        'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
+        'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
+        'estado': estado_base,
+        'animales': preferenciasTraductor1(custom_data.get('animales') or data.get('animales')),
+        'metros': clean_int(custom_data.get('metros') or data.get('metros')),
+        'balcon': preferenciasTraductor1(custom_data.get('balcon') or data.get('balcon')),
+        'garaje': preferenciasTraductor1(custom_data.get('garaje') or data.get('garaje')),
+        'patioInterior': preferenciasTraductor1(custom_data.get('patioInterior') or data.get('patioInterior')),
+        'imagenesUrl': imagenes_limpias,
+    }
+    return parsed_data
+
+
+
 # --- FUNCIONES INVERSAS (DB → GHL) ---
 
 def format_currency_eur(value):

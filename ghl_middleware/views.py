@@ -20,12 +20,14 @@ from .utils import (
 )
 from .helpers import (
     clean_currency, clean_int, preferenciasTraductor1,
-    preferenciasTraductor2, estadoPropTrad, guardadorURL
+    preferenciasTraductor2, estadoPropTrad, guardadorURL,
+    parse_zona_nombres, parse_property_data
 )
 from .matching import (
     buscar_clientes_para_propiedad, buscar_propiedades_para_cliente,
     actualizar_relaciones_propiedad, actualizar_relaciones_cliente
 )
+from .ImgCloudinary import upload_img_model, eliminar_recurso_cloudinary
 
 logger = logging.getLogger(__name__)
 
@@ -160,112 +162,7 @@ class GHLOAuthCallbackView(APIView):
             )
 
 
-# -------------------------------------------------------------------------
-# VISTA 2: WEBHOOK PROPIEDAD
-# -------------------------------------------------------------------------
-class WebhookPropiedadView(APIView):
-    authentication_classes = []
-    permission_classes = [AllowAny]
 
-    def post(self, request):
-        if not verify_webhook_signature(request):
-            return Response({'error': 'Invalid signature'}, status=403)
-
-        try:
-            data = request.data
-            logger.info(f"Webhook Propiedad recibido: {data}")
-
-            custom_data = data.get('customData', {})
-            location_data = data.get('location', {})
-            location_id = location_data.get('id') or custom_data.get('location_id')
-
-            if not location_id:
-                return Response({'error': 'Missing location_id'}, status=400)
-
-            agencia = get_object_or_404(Agencia, location_id=location_id)
-            ghl_record_id = custom_data.get('contact_id') or data.get('id')
-            id_django = custom_data.get('id_django') or data.get('id_django')
-
-            with transaction.atomic():
-                # Determinar visibilidad en web según checkbox de portales
-                estado_base = estadoPropTrad(custom_data.get("estado"))
-                publicar_en_raw = custom_data.get('publicar_en', [])
-                portales = [p.strip().lower() for p in publicar_en_raw] if isinstance(publicar_en_raw, list) else [p.strip().lower() for p in str(publicar_en_raw).split(',') if p.strip()]
-
-                prop_data = {
-                    'agencia': agencia,
-                    'ghl_contact_id': ghl_record_id if ghl_record_id else None,
-                    'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
-                    'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
-                    'estado': estado_base,
-                    'animales': preferenciasTraductor1(custom_data.get('animales')),
-                    'metros': clean_int(custom_data.get('metros')),
-                    'balcon': preferenciasTraductor1(custom_data.get('balcon')),
-                    'garaje': preferenciasTraductor1(custom_data.get('garaje')),
-                    'patioInterior': preferenciasTraductor1(custom_data.get('patioInterior')),
-                    'imagenesUrl': guardadorURL(custom_data.get('imagenesUrl')),
-                }
-
-                if id_django:
-                    propiedad, created = Propiedad.objects.update_or_create(
-                        id=id_django,
-                        agencia=agencia,
-                        defaults=prop_data
-                    )
-                else:
-                    propiedad, created = Propiedad.objects.update_or_create(
-                        agencia=agencia,
-                        ghl_contact_id=ghl_record_id if ghl_record_id else None,
-                        defaults=prop_data
-                    )
-
-                zona_nombre = custom_data.get("zona")
-                if zona_nombre:
-                    if isinstance(zona_nombre, list):
-                        zona_bruta = [str(z).strip() for z in zona_nombre]
-                    else:
-                        zona_bruta = [z.strip() for z in str(zona_nombre).split(",")]
-                    
-                    if zona_bruta:
-                        z_nombres = [z.split("--")[0].strip() for z in zona_bruta if z.split("--")[0].strip()]
-                        if z_nombres:
-                            zonas_objs = Zona.objects.filter(nombre__in=z_nombres)
-                            if zonas_objs.exists():
-                                propiedad.zonas.set(zonas_objs)
-
-                if propiedad.estado == Propiedad.estadoPiso.ACTIVO:
-                    clientes_match = buscar_clientes_para_propiedad(propiedad, agencia)
-                    matches_count = actualizar_relaciones_propiedad(propiedad, clientes_match)
-                else:
-                    clientes_match = Cliente.objects.none()
-                    matches_count = 0
-
-            # Sincronizacion con GHL (fuera de la transaccion: llamadas HTTP externas)
-            # Fix: Sincronizar SIEMPRE, incluso si matches_count es 0, para limpiar asociaciones viejas.
-            if not agencia.association_type_id:
-                logger.warning(f"Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
-                return Response({'status': 'warning', 'msg': 'Falta Association ID', 'matches_found': matches_count})
-
-            access_token = get_valid_token(location_id)
-
-            if access_token:
-                target_ids = [c.ghl_contact_id for c in clientes_match]  # Sera [] si matches_count == 0
-
-                sync_associations_background(
-                    access_token=access_token,
-                    location_id=location_id,
-                    origin_record_id=propiedad.ghl_contact_id,
-                    target_ids_list=target_ids,
-                    association_id_val=agencia.association_type_id
-                )
-            else:
-                logger.warning(f"No valid token found for {location_id}")
-
-            return Response({'status': 'success', 'matches_found': matches_count})
-
-        except Exception as e:
-            logger.error(f"Error en Webhook Propiedad: {str(e)}", exc_info=True)
-            return Response({"error": "Error interno procesando propiedad"}, status=500)
 
 
 # -------------------------------------------------------------------------
@@ -510,7 +407,10 @@ class WebhookPropiedadDeleteView(APIView):
             ghl_deleted = ghl_delete_property_record(access_token, agencia.property_object_id, propiedad.ghl_contact_id)
             
             if ghl_deleted:
-                # Si se borro bien de GHL, la borramos localmente
+                # Si se borro bien de GHL, borramos imágenes de Cloudinary y luego de BBDD local
+                if propiedad.imagenesUrl and isinstance(propiedad.imagenesUrl, list):
+                    eliminar_recurso_cloudinary(propiedad.imagenesUrl, resource_type="image")
+                
                 propiedad.delete()
                 return Response({'status': 'deleted', 'message': 'Propiedad borrada correctamente de GHL y BBDD local'})
             else:
@@ -609,6 +509,99 @@ class UniversalDeleteView(APIView):
         except Exception as e:
             logger.error(f"Error en UniversalDeleteView: {str(e)}", exc_info=True)
             return Response({"error": "Error interno"}, status=500)
+
+
+# -------------------------------------------------------------------------
+# VISTA 7: GESTION DE PROPIEDADES (CREAR/EDITAR DESDE FRONTEND)
+# -------------------------------------------------------------------------
+import threading
+from .utils import sync_record_to_ghl
+
+class ApiGestionPropiedadView(APIView):
+    """
+    Endpoint (CQRS Command) para el Frontend.
+    El Frontend usa este endpoint para CREAR o ACTUALIZAR propiedades localmente,
+    y el middleware automatiza la creacion o actualizacion en GHL asi como el matching.
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        """Crear o actualizar propiedad desde el Frontend"""
+        try:
+            data = request.data
+            agency_id = data.get('agencia') or request.query_params.get('agency_id')
+            
+            if not agency_id:
+                return Response({"error": "agency_id es requerido"}, status=400)
+            
+            agencia = get_object_or_404(Agencia, location_id=agency_id)
+            if not agencia.property_object_id:
+                return Response({'error': 'La agencia no tiene configurado el Property Object ID'}, status=400)
+
+            # Buscar si existe por ghl_contact_id para update
+            ghl_record_id = data.get('ghl_record_id') or data.get('ghl_contact_id')
+
+            with transaction.atomic():
+                prop_data = parse_property_data(data)
+                prop_data['agencia'] = agencia
+
+                # --- NOTA (TODO): LÓGICA DE COMPARACIÓN DE IMÁGENES ---
+                # Queda pendiente implementar la lógica de 3 lados (añadir nuevas, 
+                # mantener existentes, borrar eliminadas). Todo llegará desde el FrontEnd 
+                # y deberemos discernir cuáles son las que ya estaban y cuáles se quedan o borran. 
+                # Como todavía no se sabe en qué formato exacto llegarán las URLs/IDs, 
+                # se deja esta nota como recordatorio para implementarlo más adelante.
+                # -------------------------------------------------------------
+
+                # Subir imágenes a Cloudinary si vienen en el request
+                archivos = request.FILES.getlist('imagenes') or request.FILES.getlist('images') or request.FILES.getlist('file')
+                if archivos:
+                    print(archivos)
+                    public_ids = upload_img_model(archivos)
+                    if public_ids:
+                        prop_data['imagenesUrl'] = public_ids
+
+                # Portales (Pendiente para futura funcionalidad de filtrado web)
+                publicar_en_raw = data.get('publicar_en', [])
+                portales = [p.strip().lower() for p in publicar_en_raw] if isinstance(publicar_en_raw, list) else [p.strip().lower() for p in str(publicar_en_raw).split(',') if p.strip()]
+
+                if ghl_record_id:
+                    prop_data['ghl_contact_id'] = ghl_record_id
+                    propiedad, created = Propiedad.objects.update_or_create(
+                        ghl_contact_id=ghl_record_id,
+                        agencia=agencia,
+                        defaults=prop_data
+                    )
+                else:
+                    prop_data['ghl_contact_id'] = None
+                    propiedad = Propiedad.objects.create(**prop_data)
+                    created = True
+
+                # Zonas
+                zona_input = data.get("location") or data.get("zona")
+                z_nombres = parse_zona_nombres(zona_input)
+                if z_nombres:
+                    zonas_objs = Zona.objects.filter(nombre__in=z_nombres)
+                    propiedad.zonas.set(zonas_objs)
+
+            # Enviar a GHL en background para no bloquear el frontend HTTP
+            threading.Thread(
+                target=sync_record_to_ghl,
+                args=(propiedad, 'propiedad', created)
+            ).start()
+
+            return Response({
+                "status": "success",
+                "message": "Propiedad procesada y sincronizacion enviada.",
+                "local_id": propiedad.id,
+                "ghl_record_id": propiedad.ghl_contact_id
+            }, status=201 if created else 200)
+
+        except Exception as e:
+            logger.error(f"Error en ApiGestionPropiedadView: {str(e)}", exc_info=True)
+            return Response({"error": "Error interno"}, status=500)
+
 
 
 
