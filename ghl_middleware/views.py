@@ -412,6 +412,7 @@ class WebhookPropiedadDeleteView(APIView):
                     eliminar_recurso_cloudinary(propiedad.imagenesUrl, resource_type="image")
                 
                 propiedad.delete()
+                print(f"La propiedad {id_django} se ha borrado!")
                 return Response({'status': 'deleted', 'message': 'Propiedad borrada correctamente de GHL y BBDD local'})
             else:
                 return Response({'error': 'Error intentando borrar la propiedad de GHL'}, status=500)
