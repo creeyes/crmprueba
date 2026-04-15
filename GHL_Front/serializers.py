@@ -3,7 +3,8 @@ from ghl_middleware.models import Propiedad
 from ghl_middleware.ImgCloudinary import generar_url_firmada
 
 class PropiedadPublicaSerializer(serializers.ModelSerializer):
-    id = serializers.CharField(source='ghl_contact_id')
+    id = serializers.IntegerField(read_only=True)
+    ghl_id = serializers.CharField(source='ghl_contact_id', read_only=True)
     title = serializers.SerializerMethodField()
     price = serializers.DecimalField(source='precio', max_digits=12, decimal_places=0)
     location = serializers.SerializerMethodField()
@@ -30,7 +31,7 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Propiedad
         fields = [
-            'id', 'title', 'price', 'location', 
+            'id', 'ghl_id', 'title', 'price', 'location', 
             'beds', 'sqm', 'type',
             'image', 'images', 'features', 'isFeatured',
             'description', 'animales', 'balcon', 'garaje', 'patioInterior', 
