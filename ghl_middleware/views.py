@@ -550,6 +550,7 @@ class ApiGestionPropiedadView(APIView):
             with transaction.atomic():
                 prop_data = parse_property_data(data)
                 prop_data['agencia'] = agencia
+                print(f"ARCHIVO: views.py, LINEA: 553 - Iniciando gestion de imagenes. Borrar: {data.get('imagenes_borrar')}, Nuevas: {len(request.FILES.getlist('imagenes'))}")
 
                 # --- LÓGICA DE IMÁGENES (Cloudinary) ---
                 # 1. Recuperamos lo que ya habia en la base de datos
@@ -574,6 +575,7 @@ class ApiGestionPropiedadView(APIView):
                 
                 # Asignamos la lista final (antiguas mantenidas + nuevas subidas)
                 prop_data['imagenesUrl'] = current_pids
+                print(f"ARCHIVO: views.py, LINEA: 577 - Lista final de imagenesUrl para guardar en DB: {current_pids}")
 
                 # Portales (Pendiente para futura funcionalidad de filtrado web)
                 publicar_en_raw = data.get('publicar_en', [])
@@ -590,6 +592,8 @@ class ApiGestionPropiedadView(APIView):
                     prop_data['ghl_contact_id'] = None
                     propiedad = Propiedad.objects.create(**prop_data)
                     created = True
+                
+                print(f"ARCHIVO: views.py, LINEA: 594 - {'Creada' if created else 'Actualizada'} propiedad ID: {propiedad.id} con ghl_id: {propiedad.ghl_contact_id}")
 
                 # Zonas
                 zona_input = data.get("location") or data.get("zona")

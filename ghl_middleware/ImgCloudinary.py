@@ -19,6 +19,7 @@ def upload_img_model(archivos):
             return []
             
     public_ids = []
+    print(f"ARCHIVO: ImgCloudinary.py, LINEA: 22 - Han llegado {len(archivos)} archivos para subir.")
     
     for archivo in archivos:
         try:
@@ -34,6 +35,7 @@ def upload_img_model(archivos):
         except Exception as e:
             print(f"Error subiendo el archivo a Cloudinary: {e}")
             
+    print(f"ARCHIVO: ImgCloudinary.py, LINEA: 37 - Subida a Cloudinary finalizada. IDs obtenidos: {public_ids}")
     return public_ids
 
 def generar_url_firmada(public_ids, resource_type="image", minutes_valid=10):
@@ -77,6 +79,7 @@ def eliminar_recurso_cloudinary(public_ids, resource_type="image"):
         public_ids = [public_ids]
 
     todos_eliminados = True
+    print(f"ARCHIVO: ImgCloudinary.py, LINEA: 80 - Solicitud de borrado en Cloudinary para IDs: {public_ids}")
     for pid in public_ids:
         try:
             resultado = cloudinary.uploader.destroy(
@@ -86,9 +89,9 @@ def eliminar_recurso_cloudinary(public_ids, resource_type="image"):
             )
             
             if resultado.get('result') == 'ok':
-                print(f"Eliminado con éxito de Cloudinary: {pid}")
+                print(f"ARCHIVO: ImgCloudinary.py, LINEA: 89 - Eliminado con éxito de Cloudinary: {pid}")
             else:
-                print(f"No se encontró el recurso o error al eliminar {pid}: {resultado}")
+                print(f"ARCHIVO: ImgCloudinary.py, LINEA: 92 - Error o no encontrado en Cloudinary {pid}: {resultado}")
                 todos_eliminados = False
                 
         except Exception as e:
