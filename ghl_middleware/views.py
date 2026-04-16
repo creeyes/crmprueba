@@ -561,29 +561,37 @@ class ApiGestionPropiedadView(APIView):
                 imagenes_borrar_raw = data.get('imagenes_borrar', [])
                 
                 # Caso A: Es un QueryDict (FormData) y puede tener múltiples valores
-                if hasattr(data, 'getlist') and not isinstance(imagenes_borrar_raw, list):
+                if hasattr(data, 'getlist'):
                     list_from_form = data.getlist('imagenes_borrar')
                     if list_from_form:
-                        imagenes_borrar_raw = list_from_form
+                        # Si el primer elemento es un string que parece un JSON array, lo desempaquetamos
+                        if len(list_from_form) == 1 and isinstance(list_from_form[0], str) and list_from_form[0].strip().startswith('['):
+                            try:
+                                import json
+                                imagenes_borrar_raw = json.loads(list_from_form[0])
+                            except:
+                                imagenes_borrar_raw = list_from_form
+                        else:
+                            imagenes_borrar_raw = list_from_form
 
-                # Caso B: Llega como un string JSON (común en React + FormData)
+                # Caso B: Si llego como un solo string JSON fuera de una lista
                 if isinstance(imagenes_borrar_raw, str) and imagenes_borrar_raw.strip().startswith('['):
                     try:
                         import json
                         imagenes_borrar_raw = json.loads(imagenes_borrar_raw)
                     except:
-                        print(f"DEBUG: Error parseando JSON de imagenes_borrar: {imagenes_borrar_raw}")
+                        pass
                 
-                # Caso C: Llega como un string simple con comas
+                # Caso C: String simple con comas
                 elif isinstance(imagenes_borrar_raw, str) and ',' in imagenes_borrar_raw:
                     imagenes_borrar_raw = [x.strip() for x in imagenes_borrar_raw.split(',') if x.strip()]
                 
-                # Caso D: Un solo string (una sola URL)
+                # Caso D: Un solo string
                 elif isinstance(imagenes_borrar_raw, str) and imagenes_borrar_raw:
                     imagenes_borrar_raw = [imagenes_borrar_raw]
 
                 if imagenes_borrar_raw and isinstance(imagenes_borrar_raw, list):
-                    print(f"DEBUG: imagenes_borrar_raw procesada: {imagenes_borrar_raw}")
+                    print(f"DEBUG: imagenes_borrar_raw FINAL: {imagenes_borrar_raw}")
                     ids_a_borrar = []
                     for url in imagenes_borrar_raw:
                         if not url: continue
