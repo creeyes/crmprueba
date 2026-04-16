@@ -1,4 +1,5 @@
 import logging
+import os
 import hmac
 import hashlib
 import requests
@@ -553,8 +554,8 @@ class ApiGestionPropiedadView(APIView):
                 print(f"ARCHIVO: views.py, LINEA: 553 - Iniciando gestion de imagenes. Borrar: {data.get('imagenes_borrar')}, Nuevas: {len(request.FILES.getlist('imagenes'))}")
 
                 # --- LÓGICA DE IMÁGENES (Cloudinary) ---
-                # 1. Recuperamos lo que ya habia en la base de datos
-                current_pids = list(prop_existente.imagenesUrl) if (prop_existente and prop_existente.imagenesUrl) else []
+                # 1. Recuperamos y LIMPIAMOS lo que ya habia en la base de datos (por si habia con extension)
+                current_pids = [os.path.splitext(pid)[0] for pid in prop_existente.imagenesUrl] if (prop_existente and prop_existente.imagenesUrl) else []
 
                 # 2. Procesar borrados si existen (Cloudinary + Local)
                 imagenes_borrar = data.get('imagenes_borrar', [])
