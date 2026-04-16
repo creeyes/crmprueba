@@ -19,17 +19,24 @@ def upload_img_model(archivos):
     public_ids = []
     print(f"ARCHIVO: ImgCloudinary.py, LINEA: 22 - Han llegado {len(archivos)} archivos para subir.")
     
+    import uuid
     for archivo in archivos:
         try:
-            # LIMPIEZA: Quitamos la extensión para evitar duplicados en la URL (ej: .jpg.jpg)
-            nombre_base = os.path.splitext(archivo.name)[0]
+            # 1. Obtener nombre base y limpiar caracteres (solo permite letras, números, -, _)
+            # Esto evita errores con tildes, espacios o símbolos raros en la URL
+            nombre_raw = os.path.splitext(archivo.name)[0]
+            nombre_limpio = re.sub(r'[^\w\-_]', '_', nombre_raw).lower()
+            
+            # 2. Generar sufijo único de 8 caracteres (Probabilidad de choque: 1 entre 4.000 millones)
+            sufijo = uuid.uuid4().hex[:8]
+            public_id_final = f"{nombre_limpio}_{sufijo}"
             
             resultado = cloudinary.uploader.upload(
                 archivo,
                 resource_type="image",
                 folder="pisosImagenes/",
                 type="authenticated",
-                public_id = nombre_base
+                public_id = public_id_final
             )
             public_ids.append(resultado['public_id'])
             
