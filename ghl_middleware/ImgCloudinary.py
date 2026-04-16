@@ -89,6 +89,7 @@ def eliminar_recurso_cloudinary(public_ids, resource_type="image"):
             resultado = cloudinary.uploader.destroy(
                 pid_clean, 
                 resource_type=resource_type,
+                type="authenticated",
                 invalidate=True 
             )
             
