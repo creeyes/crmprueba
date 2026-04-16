@@ -557,12 +557,35 @@ class ApiGestionPropiedadView(APIView):
                 # 1. Recuperamos y LIMPIAMOS lo que ya habia en la base de datos (por si habia con extension)
                 current_pids = [os.path.splitext(pid)[0] for pid in prop_existente.imagenesUrl] if (prop_existente and prop_existente.imagenesUrl) else []
 
-                # 2. Procesar borrados si existen (Cloudinary + Local)
-                imagenes_borrar = data.get('imagenes_borrar', [])
-                if isinstance(imagenes_borrar, list) and imagenes_borrar:
-                    print(f"DEBUG: imagenes_borrar raw: {imagenes_borrar}")
+                # 2. Procesar borrados: Manejar diferentes formatos (Lista, String JSON, o String con comas)
+                imagenes_borrar_raw = data.get('imagenes_borrar', [])
+                
+                # Caso A: Es un QueryDict (FormData) y puede tener múltiples valores
+                if hasattr(data, 'getlist') and not isinstance(imagenes_borrar_raw, list):
+                    list_from_form = data.getlist('imagenes_borrar')
+                    if list_from_form:
+                        imagenes_borrar_raw = list_from_form
+
+                # Caso B: Llega como un string JSON (común en React + FormData)
+                if isinstance(imagenes_borrar_raw, str) and imagenes_borrar_raw.strip().startswith('['):
+                    try:
+                        import json
+                        imagenes_borrar_raw = json.loads(imagenes_borrar_raw)
+                    except:
+                        print(f"DEBUG: Error parseando JSON de imagenes_borrar: {imagenes_borrar_raw}")
+                
+                # Caso C: Llega como un string simple con comas
+                elif isinstance(imagenes_borrar_raw, str) and ',' in imagenes_borrar_raw:
+                    imagenes_borrar_raw = [x.strip() for x in imagenes_borrar_raw.split(',') if x.strip()]
+                
+                # Caso D: Un solo string (una sola URL)
+                elif isinstance(imagenes_borrar_raw, str) and imagenes_borrar_raw:
+                    imagenes_borrar_raw = [imagenes_borrar_raw]
+
+                if imagenes_borrar_raw and isinstance(imagenes_borrar_raw, list):
+                    print(f"DEBUG: imagenes_borrar_raw procesada: {imagenes_borrar_raw}")
                     ids_a_borrar = []
-                    for url in imagenes_borrar:
+                    for url in imagenes_borrar_raw:
                         if not url: continue
                         res = extraer_public_id(url)
                         print(f"DEBUG: Procesando URL: {url} -> extraer_public_id result: {res}")
