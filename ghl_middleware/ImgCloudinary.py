@@ -107,21 +107,15 @@ def eliminar_recurso_cloudinary(public_ids, resource_type="image"):
 
 def extraer_public_id(url):
     """
-    Extrae el publicId de una URL de Cloudinary y SIEMPRE quita la extensión.
+    Extrae el publicId de una URL buscando directamente desde la carpeta 'pisosImagenes/'.
     """
     if not url:
         return None
     
-    # Intentar extraer después de la versión /v1234/
-    match = re.search(r'/v\d+/(.+)', url)
+    # Buscamos 'pisosImagenes/' y capturamos todo lo que sigue hasta el final o un query param
+    match = re.search(r'(pisosImagenes/.*)', url)
     if match:
-        path = match.group(1).split('?')[0] # Quitar query params
-        return os.path.splitext(path)[0]   # Quitar extensión (.jpg, .png, etc)
+        path = match.group(1).split('?')[0] # Limpiar query params (?s=...)
+        return os.path.splitext(path)[0]   # Limpiar extensiones (.jpg, etc)
     
-    # Fallback: después de authenticated/ o upload/
-    match = re.search(r'/(?:authenticated|upload)/(?:s--.*?--/)?(?:v\d+/)?(.+)', url)
-    if match:
-        path = match.group(1).split('?')[0]
-        return os.path.splitext(path)[0]
-
-    return None
+    return None

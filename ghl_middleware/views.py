@@ -563,9 +563,17 @@ class ApiGestionPropiedadView(APIView):
                     ids_a_borrar = [extraer_public_id(url) for url in imagenes_borrar if url]
                     ids_a_borrar = [pid for pid in ids_a_borrar if pid]
                     if ids_a_borrar:
+                        print(f"DEBUG BORRADO: IDs extraídos de la URL: {ids_a_borrar}")
+                        print(f"DEBUG BORRADO: IDs actuales en la DB (limpios): {current_pids}")
+                        
                         eliminar_recurso_cloudinary(ids_a_borrar)
-                        # Quitamos de nuestra lista local los IDs que hemos borrado en Cloudinary
+                        
+                        # Guardamos la lista antes para comparar
+                        pids_antes = len(current_pids)
                         current_pids = [pid for pid in current_pids if pid not in ids_a_borrar]
+                        pids_despues = len(current_pids)
+                        
+                        print(f"DEBUG BORRADO: Se han eliminado {pids_antes - pids_despues} elementos de la lista local.")
 
                 # 3. Subir nuevas imágenes (request.FILES)
                 archivos = request.FILES.getlist('imagenes') or request.FILES.getlist('images') or request.FILES.getlist('file')
