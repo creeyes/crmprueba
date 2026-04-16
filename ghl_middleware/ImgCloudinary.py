@@ -1,3 +1,4 @@
+import re
 import cloudinary.uploader
 import time
 from cloudinary.utils import cloudinary_url
@@ -95,3 +96,29 @@ def eliminar_recurso_cloudinary(public_ids, resource_type="image"):
             todos_eliminados = False
             
     return todos_eliminados
+
+def extraer_public_id(url):
+    """
+    Extrae el publicId de una URL de Cloudinary.
+    Soporta URLs firmadas/autenticadas.
+    Generalmente el public_id está después de la versión (vXXXXXXXX/) 
+    y antes de la extensión.
+    """
+    if not url:
+        return None
+    
+    # Patrón: busca /v seguido de dígitos, luego una barra, 
+    # y captura todo hasta el punto de la extensión.
+    # Ejemplo: .../v12345678/pisosImagenes/foto1.jpg -> pisosImagenes/foto1
+    import re
+    match = re.search(r'/v\d+/(.+)\.[a-z]{3,4}', url)
+    if match:
+        return match.group(1).split('?')[0] # Eliminar posibles query params si los hay
+    
+    # Fallback: si no tiene versión (raro en nuestras firmadas)
+    # Intentar buscar después de /authenticated/ o /upload/
+    match = re.search(r'/(?:authenticated|upload)/(?:s--.*?--/)?(?:v\d+/)?(.+)\.[a-z]{3,4}', url)
+    if match:
+        return match.group(1).split('?')[0]
+
+    return None

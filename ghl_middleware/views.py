@@ -27,7 +27,7 @@ from .matching import (
     buscar_clientes_para_propiedad, buscar_propiedades_para_cliente,
     actualizar_relaciones_propiedad, actualizar_relaciones_cliente
 )
-from .ImgCloudinary import upload_img_model, eliminar_recurso_cloudinary
+from .ImgCloudinary import upload_img_model, eliminar_recurso_cloudinary, extraer_public_id
 
 logger = logging.getLogger(__name__)
 
@@ -412,7 +412,6 @@ class WebhookPropiedadDeleteView(APIView):
                     eliminar_recurso_cloudinary(propiedad.imagenesUrl, resource_type="image")
                 
                 propiedad.delete()
-                print(f"La propiedad {id_django} se ha borrado!")
                 return Response({'status': 'deleted', 'message': 'Propiedad borrada correctamente de GHL y BBDD local'})
             else:
                 return Response({'error': 'Error intentando borrar la propiedad de GHL'}, status=500)
@@ -542,26 +541,39 @@ class ApiGestionPropiedadView(APIView):
 
             # Buscar si existe por ghl_contact_id para update
             ghl_record_id = data.get('ghl_record_id') or data.get('ghl_contact_id')
+            
+            # Obtener propiedad existente para no perder imagenes que ya estaban (neutras)
+            prop_existente = None
+            if ghl_record_id:
+                prop_existente = Propiedad.objects.filter(ghl_contact_id=ghl_record_id, agencia=agencia).first()
 
             with transaction.atomic():
                 prop_data = parse_property_data(data)
                 prop_data['agencia'] = agencia
 
-                # --- NOTA (TODO): LÓGICA DE COMPARACIÓN DE IMÁGENES ---
-                # Queda pendiente implementar la lógica de 3 lados (añadir nuevas, 
-                # mantener existentes, borrar eliminadas). Todo llegará desde el FrontEnd 
-                # y deberemos discernir cuáles son las que ya estaban y cuáles se quedan o borran. 
-                # Como todavía no se sabe en qué formato exacto llegarán las URLs/IDs, 
-                # se deja esta nota como recordatorio para implementarlo más adelante.
-                # -------------------------------------------------------------
+                # --- LÓGICA DE IMÁGENES (Cloudinary) ---
+                # 1. Recuperamos lo que ya habia en la base de datos
+                current_pids = list(prop_existente.imagenesUrl) if (prop_existente and prop_existente.imagenesUrl) else []
 
-                # Subir imágenes a Cloudinary si vienen en el request
+                # 2. Procesar borrados si existen (Cloudinary + Local)
+                imagenes_borrar = data.get('imagenes_borrar', [])
+                if isinstance(imagenes_borrar, list) and imagenes_borrar:
+                    ids_a_borrar = [extraer_public_id(url) for url in imagenes_borrar if url]
+                    ids_a_borrar = [pid for pid in ids_a_borrar if pid]
+                    if ids_a_borrar:
+                        eliminar_recurso_cloudinary(ids_a_borrar)
+                        # Quitamos de nuestra lista local los IDs que hemos borrado en Cloudinary
+                        current_pids = [pid for pid in current_pids if pid not in ids_a_borrar]
+
+                # 3. Subir nuevas imágenes (request.FILES)
                 archivos = request.FILES.getlist('imagenes') or request.FILES.getlist('images') or request.FILES.getlist('file')
                 if archivos:
-                    print(archivos)
-                    public_ids = upload_img_model(archivos)
-                    if public_ids:
-                        prop_data['imagenesUrl'] = public_ids
+                    new_public_ids = upload_img_model(archivos)
+                    if new_public_ids:
+                        current_pids.extend(new_public_ids)
+                
+                # Asignamos la lista final (antiguas mantenidas + nuevas subidas)
+                prop_data['imagenesUrl'] = current_pids
 
                 # Portales (Pendiente para futura funcionalidad de filtrado web)
                 publicar_en_raw = data.get('publicar_en', [])
