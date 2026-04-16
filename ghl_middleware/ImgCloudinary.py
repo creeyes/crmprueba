@@ -113,7 +113,7 @@ def extraer_public_id(url):
         return None
     
     # Buscamos 'pisosImagenes/' y capturamos todo lo que sigue hasta el final o un query param
-    match = re.search(r'(pisosImagenes/.*)', url)
+    match = re.search(r'(pisosImagenes/.*)', url, re.IGNORECASE)
     if match:
         path = match.group(1).split('?')[0] # Limpiar query params (?s=...)
         return os.path.splitext(path)[0]   # Limpiar extensiones (.jpg, etc)

@@ -560,8 +560,15 @@ class ApiGestionPropiedadView(APIView):
                 # 2. Procesar borrados si existen (Cloudinary + Local)
                 imagenes_borrar = data.get('imagenes_borrar', [])
                 if isinstance(imagenes_borrar, list) and imagenes_borrar:
-                    ids_a_borrar = [extraer_public_id(url) for url in imagenes_borrar if url]
-                    ids_a_borrar = [pid for pid in ids_a_borrar if pid]
+                    print(f"DEBUG: imagenes_borrar raw: {imagenes_borrar}")
+                    ids_a_borrar = []
+                    for url in imagenes_borrar:
+                        if not url: continue
+                        res = extraer_public_id(url)
+                        print(f"DEBUG: Procesando URL: {url} -> extraer_public_id result: {res}")
+                        if res:
+                            ids_a_borrar.append(res)
+                    
                     if ids_a_borrar:
                         print(f"DEBUG BORRADO: IDs extraídos de la URL: {ids_a_borrar}")
                         print(f"DEBUG BORRADO: IDs actuales en la DB (limpios): {current_pids}")
