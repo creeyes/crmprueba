@@ -28,6 +28,7 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
     garaje = serializers.CharField(source='get_garaje_display', read_only=True)
     patioInterior = serializers.CharField(source='get_patioInterior_display', read_only=True)
     estado = serializers.CharField(source='get_estado_display', read_only=True)
+    isFavorite = serializers.BooleanField(source='favorito')
 
     class Meta:
         model = Propiedad
@@ -35,7 +36,7 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
             'id', 'ghl_id', 'title', 'price', 'location', 'address',
             'beds', 'sqm', 'type',
             'image', 'images', 'features', 'isFeatured',
-            'description', 'animales', 'balcon', 'garaje', 'patioInterior', 
+            'description', 'isFavorite', 'animales', 'balcon', 'garaje', 'patioInterior', 
             'estado'
         ]
 
