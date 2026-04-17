@@ -16,6 +16,7 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()     # Para la portada (Card)
     images = serializers.SerializerMethodField()    # Para la galería (Detalle)
     description = serializers.SerializerMethodField()
+    address = serializers.CharField(source='calle', read_only=True)
     # ------------------------------
 
     type = serializers.SerializerMethodField()
@@ -31,7 +32,7 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Propiedad
         fields = [
-            'id', 'ghl_id', 'title', 'price', 'location', 
+            'id', 'ghl_id', 'title', 'price', 'location', 'address',
             'beds', 'sqm', 'type',
             'image', 'images', 'features', 'isFeatured',
             'description', 'animales', 'balcon', 'garaje', 'patioInterior', 
@@ -95,7 +96,10 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
         return obj.precio > umbral
 
     def get_description(self, obj):
-        # Generamos descripción automática para evitar errores
+        # Si existe descripción en el modelo, la usamos. Si no, generamos una automática.
+        if obj.descripcion and obj.descripcion.strip():
+            return obj.descripcion
+
         ubicacion = self.get_location(obj)
         tipo = self.get_type(obj)
         return f"Excelente {tipo} en {ubicacion} con {obj.metros}m² y {obj.habitaciones} habitaciones. Contáctanos para visitar."
