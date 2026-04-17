@@ -137,6 +137,8 @@ def parse_property_data(data, custom_data=None):
         'balcon': preferenciasTraductor1(custom_data.get('balcon') or data.get('balcon')),
         'garaje': preferenciasTraductor1(custom_data.get('garaje') or data.get('garaje')),
         'patioInterior': preferenciasTraductor1(custom_data.get('patioInterior') or data.get('patioInterior')),
+        'descripcion': (custom_data.get('descripcion') or data.get('descripcion') or "").strip(),
+        'calle': (custom_data.get('calle') or data.get('calle') or "").strip(),
         'imagenesUrl': imagenes_limpias,
     }
     return parsed_data
