@@ -37,7 +37,7 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
             'beds', 'sqm', 'type',
             'image', 'images', 'features', 'isFeatured',
             'description', 'isFavorite', 'animales', 'balcon', 'garaje', 'patioInterior', 
-            'estado'
+            'estado', 'notas'
         ]
 
     def get_title(self, obj):
