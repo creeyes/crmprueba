@@ -34,7 +34,8 @@ GET /api/properties/?agency_id=WpWPYfkF9tMdy8HV4UHM&page=1&page_size=20
   "previous": null,
   "results": [
     {
-      "id": "contact_abc123",
+      "id": 1,
+      "ghl_id": "contact_abc123",
       "title": "Oportunidad en Gràcia, Barcelona",
       "price": 450000,
       "location": "Gràcia",
@@ -44,7 +45,6 @@ GET /api/properties/?agency_id=WpWPYfkF9tMdy8HV4UHM&page=1&page_size=20
       "image": "https://example.com/image1.jpg",
       "images": ["https://example.com/image1.jpg", "https://example.com/image2.jpg"],
       "features": ["Balcón", "Garaje"],
-      "isFeatured": false,
       "description": "Excelente Apartment en Gràcia con 85m² y 3 habitaciones. Contáctanos para visitar."
     }
   ]
@@ -116,7 +116,8 @@ GET /api/properties/contact_abc123/?agency_id=ABC123
 **Respuesta:**
 ```json
 {
-  "id": "contact_abc123",
+  "id": 1,
+  "ghl_id": "contact_abc123",
   "title": "Oportunidad en Gràcia, Barcelona",
   "price": 450000,
   "location": "Gràcia",
@@ -126,7 +127,6 @@ GET /api/properties/contact_abc123/?agency_id=ABC123
   "image": "https://example.com/image1.jpg",
   "images": ["https://example.com/image1.jpg", "https://example.com/image2.jpg"],
   "features": ["Balcón", "Garaje"],
-  "isFeatured": false,
   "description": "Excelente Apartment en Gràcia con 85m² y 3 habitaciones. Contáctanos para visitar."
 }
 ```
@@ -181,7 +181,8 @@ GET /api/locations/?agency_id=ABC123
 
 ```typescript
 interface Property {
-  id: string;              // ghl_contact_id (ID del contacto en GHL)
+  id: number;              // ID numérico de Django (id_django)
+  ghl_id: string;          // ghl_contact_id (ID del contacto en GHL)
   title: string;           // Título generado automáticamente
   price: number;           // Precio sin decimales (EUR)
   location: string;        // Nombre de la zona
@@ -191,7 +192,6 @@ interface Property {
   image: string;           // URL de la primera imagen (o placeholder)
   images: string[];        // Array de URLs de todas las imágenes
   features: string[];      // ["Balcón", "Garaje", "Mascotas", "Patio"]
-  isFeatured: boolean;     // true si precio > umbral_featured de la agencia
   description: string;     // Descripción generada automáticamente
 }
 ```

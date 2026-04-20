@@ -21,7 +21,6 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
 
     type = serializers.SerializerMethodField()
     features = serializers.SerializerMethodField()
-    isFeatured = serializers.SerializerMethodField()
 
     animales = serializers.CharField(source='get_animales_display', read_only=True)
     balcon = serializers.CharField(source='get_balcon_display', read_only=True)
@@ -35,7 +34,7 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'ghl_id', 'title', 'price', 'location', 'address',
             'beds', 'sqm', 'type',
-            'image', 'images', 'features', 'isFeatured',
+            'image', 'images', 'features',
             'description', 'isFavorite', 'animales', 'balcon', 'garaje', 'patioInterior', 
             'estado', 'notas'
         ]
@@ -91,11 +90,6 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
         # CORRECCIÓN #26: Quitada zona de features (ya está en location, era redundante)
         return features
         
-    def get_isFeatured(self, obj):
-        # CORRECCIÓN #25: Usa el umbral configurable por agencia
-        umbral = getattr(obj.agencia, 'umbral_featured', 500000)
-        return obj.precio > umbral
-
     def get_description(self, obj):
         # Si existe descripción en el modelo, la usamos. Si no, generamos una automática.
         if obj.descripcion and obj.descripcion.strip():

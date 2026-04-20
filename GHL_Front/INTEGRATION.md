@@ -418,7 +418,6 @@ export interface Property {
   image: string;           // URL de la imagen principal
   images: string[];        // Array de URLs de imágenes
   features: string[];      // ["Balcón", "Garaje", "Mascotas", "Patio"]
-  isFeatured: boolean;     // Es destacada
   description: string;     // Descripción generada
 }
 
