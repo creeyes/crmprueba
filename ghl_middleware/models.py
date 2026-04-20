@@ -135,6 +135,7 @@ class Propiedad(models.Model):
     patioInterior = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
     descripcion = models.TextField(blank=True, null=True)
     calle = models.CharField(max_length=255, blank=True, null=True)
+    notas = models.TextField(blank=True, null=True)
     favorito = models.BooleanField(default=False)
 
     sync_status = models.CharField(
