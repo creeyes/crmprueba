@@ -50,13 +50,6 @@ class Agencia(models.Model):
     )
     # ------------------------------------
     
-    umbral_featured = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=500000,
-        help_text="Precio minimo para marcar una propiedad como destacada (isFeatured)"
-    )
-
     property_object_id = models.CharField(
         max_length=255, blank=True, null=True,
         help_text="ID del Custom Object 'Propiedad' en GHL (cacheado del setup)"
